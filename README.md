@@ -90,22 +90,19 @@ ZYLO UNIFIED deliberately combines **all of them** under a **shared identity, sh
 ## High‑Level Architecture
 
 ```
-                ┌───────────────────┐
-                │   ZYLO UNIFIED    │
-                │  (Orchestrator)   │
-                └─────────┬─────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
- ┌──────▼──────┐   ┌──────▼──────┐   ┌──────▼──────┐
- │ ZYLO LINK   │   │ ZYLO CLOUD  │   │ ZYLO VEIL   │
- │ Secure Chat │   │ Private FS  │   │ Stego/Crypto│
- └──────┬──────┘   └──────┬──────┘   └──────┬──────┘
-        │                 │                 │
-        └──────────────┬──┴──┬──────────────┘
-                       │ ZYLO RiG0R │
-                       │ Verification│
-                       └─────────────┘
+                      ┌─────────────────────────┐
+                      │       ZYLO UNIFIED      │
+                      │    System Orchestrator  │
+                      └───────────┬─────────────┘
+                                  │
+        ┌───────────────┬─────────┼─────────┬───────────────┐
+        │               │                   │               │
+┌───────▼────────┐ ┌────▼───────┐   ┌───────▼───────┐ ┌─────▼───────┐
+│   ZYLO LINK    │ │ ZYLO CLOUD │   │   ZYLO VEIL   │ │  ZYLO RiG0R │
+│ Secure Chat    │ │ Private FS │   │ Stego/Crypto  │ │ Verification│
+│ + AI Interface │ │ Offline    │   │ Destructive   │ │ Math/Physics│
+└────────────────┘ └────────────┘   └───────────────┘ └─────────────┘
+
 ```
 
 ---
