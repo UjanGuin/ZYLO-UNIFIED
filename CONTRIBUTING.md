@@ -1,8 +1,7 @@
-# Contributing to ZYLO-RiG0R
+# Contributing to ZYLO-UNIFIED
 
-Thank you for your interest in contributing to **ZYLO-RiG0R**.
+Thank you for your interest in contributing to **ZYLO-UNIFIED**.
 
-ZYLO-RiG0R is a research-grade mathematics and physics reasoning engine with a strong emphasis on **correctness, verification, and transparency**. Contributions are welcome, provided they align with the project’s design philosophy.
 
 ---
 
@@ -101,7 +100,7 @@ By contributing to this repository, you agree that your contributions will be li
 
 ## 📣 Final Note
 
-ZYLO-RiG0R is intentionally conservative in accepting changes.  
+ZYLO-UNIFIED is intentionally conservative in accepting changes.  
 This is by design.
 
 Thoughtful, well-reasoned contributions are always welcome.
