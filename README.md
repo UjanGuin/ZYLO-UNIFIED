@@ -44,8 +44,8 @@ This repository functions as the unification and orchestration layer for the ZYL
 </p>
 
 <p align="center">
-  <img src="assets/ui4.png" width="800" />
-  <img src="assets/ui5.png" width="800" />
+  <img src="assets/ui4.png" width="45%" />
+  <img src="assets/ui5.png" width="45%" />
 </p>
 
 <p align="center">
