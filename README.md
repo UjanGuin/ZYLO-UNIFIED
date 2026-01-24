@@ -35,6 +35,29 @@ At its core, the platform treats cryptography, intelligence, and data governance
 
 This repository functions as the unification and orchestration layer for the ZYLO ecosystem, binding multiple advanced subsystems into a modular, extensible architecture. It is intended for research, experimentation, and system-level exploration of next-generation secure intelligence platforms, where correctness, trust, and resilience are first-class design constraints rather than afterthoughts.
 
+<p align="center">
+  <img src="assets/ui1.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui2.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui3.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui4.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui5.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui6.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
 ---
 
 ## Core Philosophy
