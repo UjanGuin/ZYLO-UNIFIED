@@ -1,6 +1,6 @@
 # Security Policy
 
-ZYLO-RiG0R is a research-grade math and physics reasoning engine.  
+ZYLO-UNIFIED is a research-grade math and physics reasoning engine.  
 Security issues are taken seriously, especially those involving code execution, API key handling, or sandbox escape risks.
 
 ---
@@ -61,4 +61,4 @@ It does **not** cover:
 
 ---
 
-Thank you for helping keep ZYLO-RiG0R secure.
+Thank you for helping keep ZYLO-UNIFIED secure.
