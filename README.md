@@ -3,31 +3,26 @@
 ![Stage](https://img.shields.io/badge/stage-research--grade-blueviolet)
 ![Not Production Ready](https://img.shields.io/badge/not--production--ready-warning)
 ![Maintenance](https://img.shields.io/badge/maintained-yes-success)
-
 ![Architecture](https://img.shields.io/badge/architecture-unified-informational)
 ![Design](https://img.shields.io/badge/design-modular-success)
 ![Offline First](https://img.shields.io/badge/offline--first-yes-blue)
 ![Zero Trust](https://img.shields.io/badge/zero--trust-architecture-black)
 ![No SaaS](https://img.shields.io/badge/no--saas-dependency-important)
 ![Telemetry](https://img.shields.io/badge/telemetry-none-black)
-
 ![Security](https://img.shields.io/badge/security-advanced-darkred)
 ![Cryptography](https://img.shields.io/badge/cryptography-advanced-darkred)
 ![Steganography](https://img.shields.io/badge/steganography-experimental-8b0000)
 ![Anti--Forensics](https://img.shields.io/badge/anti--forensics-enabled-critical)
 ![Self--Destruct](https://img.shields.io/badge/self--destruct-supported-red)
-
 ![AI Assisted](https://img.shields.io/badge/AI-assisted-purple)
 ![Verifiable AI](https://img.shields.io/badge/AI-verifiable-brightgreen)
 ![Formal Verification](https://img.shields.io/badge/formal--verification-supported-blue)
 ![Math Verified](https://img.shields.io/badge/math-verified-success)
-
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Flask](https://img.shields.io/badge/flask-framework-lightgrey)
 ![Socket.IO](https://img.shields.io/badge/socket.io-realtime-black)
 ![SQLite](https://img.shields.io/badge/database-sqlite-blue)
 ![SymPy](https://img.shields.io/badge/sympy-symbolic--math-green)
-
 ![Threat Model](https://img.shields.io/badge/threat--model-WIP-yellow)
 ![Security Audit](https://img.shields.io/badge/security--audit-none-lightgrey)
 ![License](https://img.shields.io/badge/license-open--source-success)
