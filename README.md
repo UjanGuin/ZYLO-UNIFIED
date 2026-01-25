@@ -131,8 +131,8 @@ A real-time, persistent communication layer.
 </p>
 
 <p align="center">
-  <img src="assets/ui13.png" width="43%"/>
-  <img src="assets/ui15.png" width="43%"/>
+  <img src="assets/ui13.png" width="39%"/>
+  <img src="assets/ui15.png" width="60%"/>
 </p>
 
 
@@ -145,17 +145,18 @@ A self-hosted, private file vault.
 *   **Performance**: Streaming uploads/downloads, efficient directory listing.
 
 <p align="center">
-  <img src="assets/ui4.jpeg" width="43%"/>
-  <img src="assets/ui5.jpeg" width="43%"/>
-</p>
-
-<p align="center">
   <img src="assets/ui6.png" width="875" alt="ZYLO LINK UI Preview 4">
 </p>
 
 <p align="center">
   <img src="assets/ui12.png" width="875" alt="ZYLO LINK UI Preview 4">
 </p>
+
+<p align="center">
+  <img src="assets/ui4.jpeg" width="43%"/>
+  <img src="assets/ui5.jpeg" width="43%"/>
+</p>
+
 
 ### 3. ZYLO VEIL (`ZYLOVEIL.py`)
 Advanced steganography and data hiding.
