@@ -465,4 +465,4 @@ def home():
 
 if __name__ == '__main__':
     print("💎 ZYLO SERVER STARTED | PORT 5000")
-    socketio.run(app, host='0.0.0.0', port=5001, debug=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
