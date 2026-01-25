@@ -123,18 +123,18 @@ A real-time, persistent communication layer.
 *   **UX**: "Glassmorphism" design, typing indicators, read receipts, file sharing, avatar cropping.
 
 <p align="center">
+  <img src="assets/ui18.jpeg" width="18.75%"/>
+  <img src="assets/ui13.png" width="31.75%"/>
+  <img src="assets/ui15.png" width="48.25%"/>
+</p>
+
+<p align="center">
   <img src="assets/ui14.png" width="875" alt="ZYLO LINK UI Preview 4">
 </p>
 
 <p align="center">
   <img src="assets/ui16.png" width="875" alt="ZYLO LINK UI Preview 4">
 </p>
-
-<p align="center">
-  <img src="assets/ui13.png" width="39%"/>
-  <img src="assets/ui15.png" width="60%"/>
-</p>
-
 
 
 ### 2. ZYLO CLOUD (`Cloud_Storage.py`)
@@ -189,6 +189,15 @@ A formal verification engine for AI outputs.
 *   **Mode B (Direct Answer)**: For purely theoretical concepts.
 *   **Verification**: Automatically runs generated code in a sandbox to validate results against the AI's claims.
 *   **Confidence Calibration**: Assigns reliability scores to answers based on verification success.
+
+<p align="center">
+  <img src="assets/ui21.png" width="1008" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui20.png" width="80.5%"/>
+  <img src="assets/19.jpeg" width="18.5%"/>
+</p>
 
 ---
 
@@ -303,10 +312,9 @@ ngrok http 5000
 ```
 
 ```python
-if __name__ == "__main__":
-    print("\n💎 ZYLO LINK Ultimate Running Successfully")
-    print("👉 http://127.0.0.1:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+if __name__ == '__main__':
+    print("💎 ZYLO UNIFIED SERVER STARTED | PORT 5000")
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
 ```
 
 > **Note:** ngrok URLs are temporary unless you use a paid plan.
