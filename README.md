@@ -145,6 +145,11 @@ A self-hosted, private file vault.
 *   **Performance**: Streaming uploads/downloads, efficient directory listing.
 
 <p align="center">
+  <img src="assets/ui4.jpeg" width="43%"/>
+  <img src="assets/ui5.jpeg" width="43%"/>
+</p>
+
+<p align="center">
   <img src="assets/ui6.png" width="875" alt="ZYLO LINK UI Preview 4">
 </p>
 
@@ -152,10 +157,7 @@ A self-hosted, private file vault.
   <img src="assets/ui12.png" width="875" alt="ZYLO LINK UI Preview 4">
 </p>
 
-<p align="center">
-  <img src="assets/ui4.jpeg" width="43%"/>
-  <img src="assets/ui5.jpeg" width="43%"/>
-</p>
+
 
 
 ### 3. ZYLO VEIL (`ZYLOVEIL.py`)
