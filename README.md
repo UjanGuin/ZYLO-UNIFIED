@@ -122,6 +122,21 @@ A real-time, persistent communication layer.
 *   **Security**: Local SQLite storage, user authentication.
 *   **UX**: "Glassmorphism" design, typing indicators, read receipts, file sharing, avatar cropping.
 
+<p align="center">
+  <img src="assets/ui14.png" width="875" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui16.png" width="875" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui13.png" width="43%"/>
+  <img src="assets/ui15.png" width="43%"/>
+</p>
+
+
+
 ### 2. ZYLO CLOUD (`Cloud_Storage.py`)
 A self-hosted, private file vault.
 *   **Storage**: Direct interface to local encrypted partitions or external media (SD cards/USBs).
