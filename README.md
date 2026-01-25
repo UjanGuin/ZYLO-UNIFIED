@@ -36,35 +36,12 @@ At its core, the platform treats cryptography, intelligence, and data governance
 This repository functions as the unification and orchestration layer for the ZYLO ecosystem, binding multiple advanced subsystems into a modular, extensible architecture. It is intended for research, experimentation, and system-level exploration of next-generation secure intelligence platforms, where correctness, trust, and resilience are first-class design constraints rather than afterthoughts.
 
 <p align="center">
-  <img src="assets/ui1.png" width="800" alt="ZYLO LINK UI Preview 4">
+  <img src="assets/ui1.png" width="40%" />
+  <img src="assets/ui11.png" width="40%" />
 </p>
 
 <p align="center">
   <img src="assets/ui2.png" width="800" alt="ZYLO LINK UI Preview 4">
-</p>
-
-
-<p align="center">
-  <img src="assets/ui4.jpeg" width="43%"/>
-  <img src="assets/ui5.jpeg" width="43%"/>
-</p>
-
-<p align="center">
-  <img src="assets/ui6.png" width="875" alt="ZYLO LINK UI Preview 4">
-</p>
-
-<p align="center">
-  <img src="assets/ui9.png" width="60%"/>
-  <img src="assets/ui7.jpeg" width="30%"/>
-</p>
-
-
-<p align="center">
-  <img src="assets/ui8.png" width="800" alt="ZYLO LINK UI Preview 4">
-</p>
-
-<p align="center">
-  <img src="assets/ui10.png" width="800" alt="ZYLO LINK UI Preview 4">
 </p>
 
 ---
@@ -152,6 +129,15 @@ A self-hosted, private file vault.
 *   **Access Control**: Simple passphrase-based locking mechanism.
 *   **Performance**: Streaming uploads/downloads, efficient directory listing.
 
+<p align="center">
+  <img src="assets/ui4.jpeg" width="43%"/>
+  <img src="assets/ui5.jpeg" width="43%"/>
+</p>
+
+<p align="center">
+  <img src="assets/ui6.png" width="875" alt="ZYLO LINK UI Preview 4">
+</p>
+
 ### 3. ZYLO VEIL (`ZYLOVEIL.py`)
 Advanced steganography and data hiding.
 *   **Shamir Secret Sharing**: Splits data across multiple carrier images; $k$ out of $n$ carriers are needed to recover the data.
@@ -161,6 +147,20 @@ Advanced steganography and data hiding.
     *   **Time Locking**: Data accessible only within specific time windows.
     *   **Self-Destruct**: Carrier images degrade or destroy data upon excessive failed extraction attempts.
     *   **Bit-Plane Migration**: Encoding shifts over time, rendering old copies useless.
+
+<p align="center">
+  <img src="assets/ui9.png" width="60%"/>
+  <img src="assets/ui7.jpeg" width="30%"/>
+</p>
+
+
+<p align="center">
+  <img src="assets/ui8.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
+
+<p align="center">
+  <img src="assets/ui10.png" width="800" alt="ZYLO LINK UI Preview 4">
+</p>
 
 ### 4. ZYLO RiG0R (`ZYlO_RiG0R.py`)
 A formal verification engine for AI outputs.
