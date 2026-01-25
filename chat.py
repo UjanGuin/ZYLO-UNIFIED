@@ -32,7 +32,7 @@ socketio = SocketIO(cors_allowed_origins="*", async_mode='eventlet')
 # ---------------------------
 # AI Configuration
 # ---------------------------
-GROQ_DEFAULT_KEY = "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"
+GROQ_DEFAULT_KEY = "paste_your_api_key_here"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
 AI_MODEL = "llama-3.1-8b-instant"
 AI_BOT_ID = "AI_ASSISTANT"
