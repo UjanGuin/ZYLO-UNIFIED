@@ -48,19 +48,25 @@ This repository functions as the unification and orchestration layer for the ZYL
 </p>
 
 <p align="center">
-  <img src="assets/ui4.jpeg" width="45%"/>
-  <img src="assets/ui5.jpeg" width="45%"/>
+  <img src="assets/ui4.jpeg" width="43%"/>
+  <img src="assets/ui5.jpeg" width="43%"/>
 </p>
-
 
 
 <p align="center">
-  <img src="assets/ui5.png" width="800" alt="ZYLO LINK UI Preview 4">
+  <img src="assets/ui9.jpeg" width="70%"/>
+  <img src="assets/ui8.jpeg" width="30%"/>
+</p>
+
+
+<p align="center">
+  <img src="assets/ui7.png" width="800" alt="ZYLO LINK UI Preview 4">
 </p>
 
 <p align="center">
-  <img src="assets/ui6.png" width="800" alt="ZYLO LINK UI Preview 4">
+  <img src="assets/ui10.png" width="800" alt="ZYLO LINK UI Preview 4">
 </p>
+
 ---
 
 ## Core Philosophy
