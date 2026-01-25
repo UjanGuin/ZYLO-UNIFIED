@@ -746,7 +746,7 @@ HTML_PAGE = """
                 <input type="file" id="group-avatar-input" hidden accept="image/*" onchange="initCrop(this, true)">
                 
                 <h3 id="display-name" style="margin: 5px 0;">User</h3>
-                <div class="user-id-pill" onclick="copyMyID()">
+                <div id="copy" class="user-id-pill" onclick="copyMyID()">
                     <span id="my-id-code">LOADING...</span> <i class="fas fa-copy"></i>
                 </div>
             </div>
@@ -1106,8 +1106,14 @@ HTML_PAGE = """
         function closeDialog(id) { document.getElementById(id).classList.remove('dialog-active'); }
 
         function copyMyID() {
-            navigator.clipboard.writeText(currentUser.id);
-            alert("ID Copied: " + currentUser.id);
+            if (currentUser && currentUser.id) {
+                navigator.clipboard.writeText(currentUser.id).then(() => {
+                    alert("ID Copied: " + currentUser.id);
+                }).catch(err => {
+                    console.error("Copy failed: ", err);
+                    alert("Copy failed. Please copy manually: " + currentUser.id);
+                });
+            }
         }
 
         async function startNewChat() {
@@ -2140,6 +2146,7 @@ if __name__ == "__main__":
     def index_redirect(): return redirect('/link')
     socketio.init_app(app)
     socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+
 
 
 
