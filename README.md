@@ -270,7 +270,7 @@ python app.py
 ```
 
 By default, the server runs on **port 5001**:
-👉 **Access the Dashboard:** [http://localhost:5001](http://localhost:5001)
+👉 **Access the Dashboard:** [http://localhost:5000](http://localhost:5000)
 
 ---
 
