@@ -788,13 +788,16 @@ def embed_share(carrier_path: str, output_path: str, share_data: bytes,
         total_capacity = sum(payload_bits_map)
         data_bits = bytes_to_bits(data_to_embed)
         needed = len(data_bits) + header_len_bits
-    
+
+    if task_id:
+        update_progress(task_id, "Checking carrier capacity", 40)
+
     if needed > total_capacity:
         raise ValueError(
             f"Carrier '{os.path.basename(carrier_path)}' too small. "
             f"Need {needed} bits, have {total_capacity} ({total_capacity//8} bytes)."
         )
-    
+
     if task_id:
         update_progress(task_id, "Embedding data", 50)
     
@@ -1230,17 +1233,90 @@ def embed_master(secret_file: str, carrier_files: list[str], passphrase: str,
     """
     with open(secret_file, "rb") as f:
         data = f.read()
-    
+
     if task_id:
-        update_progress(task_id, "Compressing payload", 5)
-    
+        update_progress(task_id, "Analyzing requirements", 3)
+
     # [FIX] Include filename in compressed payload to preserve extension
     original_filename = os.path.basename(secret_file)
     filename_bytes = original_filename.encode("utf-8")
     blob_to_compress = struct.pack(">H", len(filename_bytes)) + filename_bytes + data
-    
-    # Compress the payload
+
+    # Calculate required size before compression
+    uncompressed_size = len(blob_to_compress)
+
+    if task_id:
+        update_progress(task_id, "Estimating compression", 5)
+
+    # Compress the payload to get actual size
     payload = lzma.compress(blob_to_compress, preset=6)
+    compressed_size = len(payload)
+
+    if task_id:
+        update_progress(task_id, "Calculating encryption overhead", 7)
+
+    # Calculate encryption overhead (AES-GCM: 16 bytes tag + IV length)
+    encrypted_size = compressed_size + IV_LEN + 16  # IV + tag
+
+    if task_id:
+        update_progress(task_id, "Preparing for Shamir split", 9)
+
+    # [FIX 1] Combine key and IV with encrypted payload for splitting
+    # Format: MasterKey(32) + MasterIV(12) + EncryptedPayload
+    full_blob_size = 32 + 12 + encrypted_size
+
+    # Pre-validate carrier capacity before expensive operations
+    if task_id:
+        update_progress(task_id, "Validating carrier capacity", 12)
+
+    n = len(carrier_files)
+    if k_needed > n:
+        k_needed = n
+    if k_needed < 1:
+        k_needed = 1
+
+    # Calculate share size (using ceiling division)
+    share_size = (full_blob_size + n - 1) // n  # Ceiling division
+    # Each share needs header + share_data
+    # Header size: HEADER_FIXED_LEN + variable parts, but let's use conservative estimate
+    header_estimate = HEADER_FIXED_LEN + 100  # Extra for variable fields
+    share_bits_needed = (header_estimate + share_size) * 8
+
+    # Check each carrier
+    for i, carrier in enumerate(carrier_files):
+        if task_id:
+            update_progress(task_id, f"Checking carrier {i+1}/{n}", 12 + int((3 * i) / n))
+
+        try:
+            img = Image.open(carrier).convert("RGBA")
+            pixels = list(img.getdata())
+            num_pixels = len(pixels)
+            width, height = img.size
+            flat_pixels = [c for p in pixels for c in p[:3]]
+
+            # Compute capacity map
+            fp = carrier_fingerprint_from_flat(flat_pixels)
+            map_seed = hashlib.sha256(fp + b"HEADER_SEED_V3").digest()
+
+            # For standard mode (not stateless), use DEFAULT_BPC_HINT
+            payload_bits_map = compute_capacity_map(pixels, width, height, DEFAULT_BPC_HINT, map_seed, flags, 0)
+            total_capacity = sum(payload_bits_map)
+
+            if total_capacity < share_bits_needed:
+                raise ValueError(
+                    f"Carrier '{os.path.basename(carrier)}' too small for share {i+1}. "
+                    f"Need {share_bits_needed} bits, have {total_capacity} ({total_capacity//8} bytes)."
+                )
+
+        except Exception as e:
+            # If we can't open the image, let the original error handling handle it
+            if "too small" in str(e):
+                raise e
+            # Otherwise continue to let embed_share handle it
+            pass
+
+    if task_id:
+        update_progress(task_id, "Compressing payload", 15)
     
     if task_id:
         update_progress(task_id, "Encrypting payload", 10)
@@ -1264,7 +1340,44 @@ def embed_master(secret_file: str, carrier_files: list[str], passphrase: str,
     
     if task_id:
         update_progress(task_id, f"Splitting into {n} shares (K={k_needed})", 15)
-    
+
+    # [FIX] Pre-validate carrier capacity before calling embed_share
+    # Calculate approximate share size
+    share_size = (len(full_blob) + n - 1) // n  # Ceiling division
+    # Header size estimate (conservative)
+    header_size = HEADER_FIXED_LEN + 50  # Extra for variable fields
+    bits_per_share = (header_size + share_size) * 8
+
+    if task_id:
+        update_progress(task_id, "Validating carrier capacity", 16)
+
+    # Check each carrier has enough capacity
+    for i, carrier in enumerate(carrier_files):
+        try:
+            img = Image.open(carrier).convert("RGBA")
+            pixels = list(img.getdata())
+            width, height = img.size
+            flat_pixels = [c for p in pixels for c in p[:3]]
+
+            # Compute capacity map (using same logic as embed_share)
+            fp = carrier_fingerprint_from_flat(flat_pixels)
+            map_seed = hashlib.sha256(fp + b"HEADER_SEED_V3").digest()
+            payload_bits_map = compute_capacity_map(pixels, width, height, DEFAULT_BPC_HINT, map_seed, flags, 0)
+            total_capacity = sum(payload_bits_map)
+
+            if total_capacity < bits_per_share:
+                raise ValueError(
+                    f"Carrier '{os.path.basename(carrier)}' too small for share {i+1}. "
+                    f"Need {bits_per_share} bits, have {total_capacity} ({total_capacity//8} bytes)."
+                )
+
+        except Exception as e:
+            if "too small" in str(e):
+                # Re-raise the carrier size error
+                raise e
+            # For other errors, let the original handling deal with it
+            pass
+
     # [FIX 1] Split the ENTIRE blob (key + iv + ciphertext) using Shamir
     # This ensures no single carrier has any useful data
     shares = shamir_split(full_blob, k_needed, n)
@@ -1477,7 +1590,7 @@ def handle_embed():
         secret_filename = os.path.basename(secret.filename) or "secret"
         s_path = os.path.join(tmp, secret_filename)
         secret.save(s_path)
-        
+
         c_paths = []
         for c in carriers:
             # Sanitize filename
@@ -1485,12 +1598,33 @@ def handle_embed():
             p = os.path.join(tmp, safe_name)
             c.save(p)
             c_paths.append(p)
-        
-        update_progress(task_id, "Starting embedding", 5)
-        
+
+        update_progress(task_id, "Validating carriers", 5)
+
+        # Early carrier capacity validation before expensive operations
+        try:
+            # Quick validation: check if carriers exist and get basic info
+            for i, carrier_path in enumerate(c_paths):
+                if not os.path.exists(carrier_path):
+                    raise ValueError(f"Carrier file {i+1} not found")
+
+                # Try to open image to verify it's valid
+                if Image:
+                    img = Image.open(carrier_path).convert("RGBA")
+                    pixels = list(img.getdata())
+                    num_pixels = len(pixels)
+                    # Very basic check: ensure we have some pixels
+                    if num_pixels == 0:
+                        raise ValueError(f"Carrier {os.path.basename(carrier_path)} has no pixels")
+
+            update_progress(task_id, "Preparing payload", 8)
+        except Exception as e:
+            clear_progress(task_id)
+            return jsonify({"error": f"Validation failed: {str(e)}"}), 400
+
         # Perform embedding
         out_files = embed_master(
-            s_path, c_paths, passphrase, flags, k_needed, 
+            s_path, c_paths, passphrase, flags, k_needed,
             start_ts, end_ts, max_att, task_id
         )
         
@@ -1507,15 +1641,27 @@ def handle_embed():
         clear_progress(task_id)
         
         return send_file(
-            mem, as_attachment=True, 
-            download_name="stego_shares.zip", 
+            mem, as_attachment=True,
+            download_name="stego_shares.zip",
             mimetype="application/zip"
         )
-        
+
     except Exception as e:
         traceback.print_exc()
         clear_progress(task_id)
-        return jsonify({"error": str(e)}), 500
+        error_msg = str(e)
+        # Check if this is a carrier size error
+        if "too small" in error_msg and "Carrier" in error_msg and "Need" in error_msg and "have" in error_msg:
+            return jsonify({
+                "error": error_msg,
+                "type": "carrier_size_insufficient",
+                "details": {
+                    "message": "The selected carrier image is too small to hide the secret file.",
+                    "recommendation": "Please select a larger carrier image or reduce the size of your secret file."
+                }
+            }), 400
+        else:
+            return jsonify({"error": error_msg}), 500
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -1944,6 +2090,13 @@ HTML_TEMPLATE = """
         .submit-btn:active {
             transform: translateY(0);
         }
+
+        .submit-btn.disabled {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3));
+            cursor: not-allowed;
+            opacity: 0.6;
+            transform: none;
+        }
         
         /* Progress Overlay */
         .progress-overlay {
@@ -2169,7 +2322,7 @@ HTML_TEMPLATE = """
                 <h2>Embed (Veil)</h2>
             </div>
             
-            <form id="embedForm" action="/embed" method="post" enctype="multipart/form-data">
+            <form id="embedForm" action="{{ url_for('.handle_embed') }}" method="post" enctype="multipart/form-data">
                 <input type="hidden" name="task_id" id="embedTaskId">
                 <div class="form-group">
                     <label class="form-label">Secret File</label>
@@ -2230,7 +2383,13 @@ HTML_TEMPLATE = """
                     <i class="fas fa-exclamation-triangle"></i>
                     <p><strong>⚠️ Self-Destruct Enabled:</strong> After the configured number of failed extraction attempts, the carrier will be permanently destroyed and data will be irrecoverable.</p>
                 </div>
-                
+
+                <div class="warning-banner" id="carrierSizeWarning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p><strong>⚠️ Carrier Too Small:</strong> The selected carrier image is too small to hide the secret file.<br>
+                    Please select a larger carrier image or reduce the size of your secret file.</p>
+                </div>
+
                 <div class="options-row">
                     <div class="option-group">
                         <label>Required Shares (K)</label>
@@ -2268,7 +2427,7 @@ HTML_TEMPLATE = """
                 <h2>Extract (Unveil)</h2>
             </div>
             
-            <form id="extractForm" action="/extract" method="post" enctype="multipart/form-data">
+            <form id="extractForm" action="{{ url_for('.handle_extract') }}" method="post" enctype="multipart/form-data">
                 <input type="hidden" name="task_id" id="extractTaskId">
                 <div class="form-group">
                     <div class="drop-zone" id="dropZone">
@@ -2363,6 +2522,32 @@ HTML_TEMPLATE = """
         document.getElementById('f_destruct').addEventListener('change', function() {
             document.getElementById('destructWarning').classList.toggle('active', this.checked);
         });
+
+        // Initialize carrier size warning banner (hidden by default)
+        const carrierSizeWarning = document.getElementById('carrierSizeWarning');
+        if (carrierSizeWarning) {
+            carrierSizeWarning.classList.remove('active');
+        }
+
+        // Reset carrier size warning when files are changed
+        document.querySelector('#embedForm input[name="secret"]').addEventListener('change', function() {
+            resetCarrierSizeWarning();
+        });
+        document.querySelector('#embedForm input[name="carrier"]').addEventListener('change', function() {
+            resetCarrierSizeWarning();
+        });
+
+        function resetCarrierSizeWarning() {
+            const carrierSizeWarning = document.getElementById('carrierSizeWarning');
+            const submitBtn = document.querySelector('#embedForm .submit-btn');
+            if (carrierSizeWarning) {
+                carrierSizeWarning.classList.remove('active');
+            }
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('disabled');
+            }
+        }
         
         // Drop zone interactions
         const dropZone = document.getElementById('dropZone');
@@ -2388,7 +2573,8 @@ HTML_TEMPLATE = """
             const progressPercent = document.getElementById('progressPercent');
             
             try {
-                const response = await fetch('/progress/' + taskId);
+                const url = "{{ url_for('.progress_endpoint', task_id='__ID__') }}".replace('__ID__', taskId);
+                const response = await fetch(url);
                 const data = await response.json();
                 
                 progressStage.textContent = data.stage || 'Processing...';
@@ -2480,7 +2666,41 @@ HTML_TEMPLATE = """
                 
             } catch (error) {
                 overlay.classList.remove('active');
-                showToast(error.message, 'error');
+
+                // Check if this is a carrier size insufficient error
+                let errorMessage = error.message;
+                let errorType = null;
+
+                try {
+                    // Try to parse JSON error response
+                    const errorData = JSON.parse(error.message);
+                    if (errorData.type === 'carrier_size_insufficient') {
+                        errorType = 'carrier_size_insufficient';
+                        errorMessage = errorData.details.message;
+
+                        // Show prominent warning banner
+                        const warningBanner = document.getElementById('carrierSizeWarning');
+                        if (warningBanner) {
+                            warningBanner.innerHTML = `
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <p><strong>⚠️ Carrier Too Small:</strong> ${errorData.details.message}<br>
+                                ${errorData.details.recommendation}</p>
+                            `;
+                            warningBanner.classList.add('active');
+
+                            // Disable submit button
+                            const submitBtn = document.querySelector('#embedForm .submit-btn');
+                            if (submitBtn) {
+                                submitBtn.disabled = true;
+                                submitBtn.classList.add('disabled');
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Not JSON, use original error message
+                }
+
+                showToast(errorMessage, 'error');
             }
         }
         
@@ -2498,15 +2718,66 @@ HTML_TEMPLATE = """
             setTimeout(() => toast.classList.remove('show'), 5000);
         }
         
+        // Helper function to format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
         // Attach form handlers
         document.getElementById('embedForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            submitWithProgress(this, '/embed');
+
+            const secretInput = this.querySelector('input[name="secret"]');
+            const carrierInputs = this.querySelectorAll('input[name="carrier"]');
+
+            // Client-side file size validation
+            if (secretInput.files && secretInput.files[0]) {
+                const secretFile = secretInput.files[0];
+                const secretSize = secretFile.size;
+
+                for (let i = 0; i < carrierInputs.length; i++) {
+                    const carrierInput = carrierInputs[i];
+                    if (carrierInput.files && carrierInput.files[0]) {
+                        const carrierFile = carrierInput.files[0];
+                        const carrierSize = carrierFile.size;
+
+                        // Carrier should be at least 2x larger than secret for steganography safety
+                        if (carrierSize < secretSize * 2) {
+                            // Show warning banner
+                            const warningBanner = document.getElementById('carrierSizeWarning');
+                            if (warningBanner) {
+                                warningBanner.innerHTML = `
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <p><strong>⚠️ Carrier Too Small:</strong> Carrier ${i+1} is ${formatFileSize(carrierSize)} but secret is ${formatFileSize(secretSize)}. Carrier must be at least 2x larger than secret.</p>
+                                `;
+                                warningBanner.classList.add('active');
+
+                                // Disable submit button
+                                const submitBtn = this.querySelector('.submit-btn');
+                                if (submitBtn) {
+                                    submitBtn.disabled = true;
+                                    submitBtn.classList.add('disabled');
+                                }
+                            }
+
+                            showToast(`Carrier ${i+1} is too small. Secret: ${formatFileSize(secretSize)}, Carrier: ${formatFileSize(carrierSize)}. Please select a larger carrier.`, 'error');
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            // If validation passes, proceed with submission
+            submitWithProgress(this, "{{ url_for('.handle_embed') }}");
         });
-        
+
         document.getElementById('extractForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            submitWithProgress(this, '/extract');
+            submitWithProgress(this, "{{ url_for('.handle_extract') }}");
         });
     </script>
 </body>
@@ -2535,3 +2806,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
