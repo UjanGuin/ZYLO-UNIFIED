@@ -1,12 +1,127 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template_string
+import logging
+from logging.handlers import RotatingFileHandler
+from flask import Flask, render_template_string, request, Response, jsonify, stream_with_context, session
+import os
+import sys
+import json
+import re
+import subprocess
+import time
+from typing import List, Dict, Optional, Any
+from io import BytesIO
+from pathlib import Path
+
+# --- GLOBAL LOGGING SETUP ---
+LOG_FILE = 'zylo_activity.log'
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=50*1024*1024, backupCount=10)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s | %(levelname)s | %(name)s | %(message)s'
+))
+file_handler.setLevel(logging.INFO)
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(file_handler)
+
+app = Flask(__name__)
+app.logger.addHandler(file_handler)
+
+def redact_sensitive(data):
+    """Redact passwords and keys from logs."""
+    if not isinstance(data, dict):
+        return data
+    redacted = data.copy()
+    sensitive_keys = ['password', 'pass', 'api_key', 'key', 'secret', 'token', 'authorization']
+    for k, v in redacted.items():
+        if any(sk in k.lower() for sk in sensitive_keys):
+            redacted[k] = "[REDACTED]"
+        elif isinstance(v, dict):
+            redacted[k] = redact_sensitive(v)
+    return redacted
+
+@app.before_request
+def log_request_info():
+    try:
+        user_id = session.get('user_id', 'ANONYMOUS')
+        payload = {}
+        if request.is_json:
+            payload = request.get_json(silent=True) or {}
+        elif request.form:
+            payload = request.form.to_dict()
+        
+        redacted_payload = redact_sensitive(payload)
+        files = [f.filename for f in request.files.values()] if request.files else []
+        
+        app.logger.info(
+            f"REQUEST | User: {user_id} | IP: {request.remote_addr} | "
+            f"Method: {request.method} | URL: {request.url} | "
+            f"Payload: {json.dumps(redacted_payload)} | Files: {files}"
+        )
+    except Exception as e:
+        app.logger.error(f"Logging Error (before_request): {e}")
+
+@app.after_request
+def log_response_info(response):
+    try:
+        user_id = session.get('user_id', 'ANONYMOUS')
+        # Only log first 500 chars of response if it's text/json
+        content_preview = ""
+        if response.direct_passthrough:
+            content_preview = "[STREAMING/FILE]"
+        else:
+            content_preview = response.get_data(as_text=True)[:500]
+            
+        app.logger.info(
+            f"RESPONSE | User: {user_id} | Status: {response.status} | "
+            f"URL: {request.url} | Content: {content_preview}..."
+        )
+    except Exception as e:
+        app.logger.error(f"Logging Error (after_request): {e}")
+    return response
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # Log the full stack trace for any unhandled exception
+    app.logger.error(f"UNHANDLED EXCEPTION | URL: {request.url} | Error: {str(e)}", exc_info=True)
+    # Re-raise or return 500
+    return "Internal Server Error", 500
+
+# --- END GLOBAL LOGGING SETUP ---
+
 from Cloud_Storage import cloud_bp
 from ZYlO_RiG0R import rigor_bp
 from chat import chat_bp, socketio
 from ZYLOVEIL import veil_bp
 import os
+import sys
+import json
+import re
+import subprocess
+import time
+from typing import List, Dict, Optional, Any
+from io import BytesIO
+from pathlib import Path
+
+try:
+    from gtts import gTTS
+    HAS_GTTS = True
+except ImportError:
+    HAS_GTTS = False
+
+try:
+    from google import genai
+    HAS_GEMINI = True
+except ImportError:
+    HAS_GEMINI = False
+
+try:
+    from zhipuai import ZhipuAI
+    HAS_ZHIPU = True
+except ImportError:
+    HAS_ZHIPU = False
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get("ZYLO_SECRET_KEY", "zylo_master_key_2026")
@@ -18,6 +133,17 @@ app.register_blueprint(cloud_bp)
 app.register_blueprint(rigor_bp)
 app.register_blueprint(chat_bp)
 app.register_blueprint(veil_bp, url_prefix='/veil')
+
+# Import and register ZYLO ZENITH blueprint
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import importlib.util
+spec = importlib.util.spec_from_file_location("AI_Zenith", os.path.join(os.path.dirname(os.path.abspath(__file__)), "AI~Zenith.py"))
+AI_Zenith = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(AI_Zenith)
+app.register_blueprint(AI_Zenith.zenith_bp)
+
 # Initialize SocketIO
 socketio.init_app(app)
 
@@ -386,15 +512,15 @@ LANDING_PAGE = """
                     </div>
                     <i class="fas fa-arrow-right" style="opacity:0.5;"></i>
                 </a>
-                
-                <div class="option-card disabled">
-                    <div class="option-icon"><i class="fas fa-comments"></i></div>
+
+                <a href="/zenith" class="option-card">
+                    <div class="option-icon"><i class="fas fa-brain"></i></div>
                     <div class="option-info">
-                        <div class="option-name">ZYLO CHAT <span class="tag dev">DEV</span></div>
-                        <div class="option-detail">General Purpose Assistant</div>
+                        <div class="option-name">ZYLO ZENITH</div>
+                        <div class="option-detail">Premium Multi-Model AI with Search</div>
                     </div>
-                    <i class="fas fa-lock" style="opacity:0.5;"></i>
-                </div>
+                    <i class="fas fa-arrow-right" style="opacity:0.5;"></i>
+                </a>
             </div>
         </div>
     </div>
@@ -464,5 +590,6 @@ def home():
     return render_template_string(LANDING_PAGE)
 
 if __name__ == '__main__':
-    print("💎 ZYLO SERVER STARTED | PORT 5000")
+    print("💎 ZYLO UNIFIED SERVER STARTED | PORT 5000")
     socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+
