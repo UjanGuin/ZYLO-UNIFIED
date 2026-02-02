@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from zhipuai import ZhipuAI
+from openai import OpenAI
 import os
 import re
 import json
@@ -28,6 +29,10 @@ except Exception:
 # -------------------------
 API_KEY = "csk-k6hvttdked4wfpfyrrf4p8n32m43dd3emer5vcw5895pvmh8"
 MODEL_NAME = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
+# New OpenRouter Config for Expert Mode
+OPENROUTER_API_KEY = "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"
+EXPERT_MODEL = "tngtech/deepseek-r1t2-chimera:free" # User requested r1t2
+
 GLM_API_KEY = "642a5c77f75141ceb178ed3106bf8a83.ETf0547Pst0azRUL"
 GLM_MODEL = "glm-4.7"
 PORT = int(os.getenv("PORT", "5005"))
@@ -36,6 +41,8 @@ SESSION_DIR = os.path.join(DATA_DIR, "sessions")
 LOGFILE = os.path.join(DATA_DIR, "server.log")
 
 glm_client = ZhipuAI(api_key=GLM_API_KEY)
+or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+
 # Research-Grade Phase Temperatures
 # ---------------------------------
 # 1. Planning: High entropy to explore solution space (avoid CoT loops)
@@ -87,7 +94,7 @@ rigor_bp = Blueprint('rigor', __name__, url_prefix='/rigor', static_folder='stat
 # app = Flask(__name__, static_folder="static")
 
 # -------------------------
-# System prompt (Hybrid: Ph.D. Persona + Strict Tooling)
+# System Prompt: Standard
 # -------------------------
 
 SYSTEM_PROMPT = r"""
@@ -162,6 +169,34 @@ FINAL OUTPUT RULE
 - DIRECT ANSWER MODE → Markdown + LaTeX (math only)
 
 Violating these rules is a critical failure.
+""".strip()
+
+# -------------------------
+# System Prompt: Expert (DeepSeek R1)
+# -------------------------
+SYSTEM_PROMPT_EXPERT = r"""
+You are DeepSeek R1, an advanced reasoning engine specializing in complex mathematics, physics, and code generation.
+
+Your goal is to provide the "Expert" solution:
+1.  **Deep Reasoning:** Use your internal Chain of Thought (CoT) to explore the problem depth.
+2.  **Tool Usage:** If the problem requires calculation, simulation, or verification, you MUST write and execute Python code.
+3.  **Output Format:** 
+    - You can freely mix natural language and code blocks.
+    - If you need to run code, output a SINGLE JSON block for the tool at any point (usually at the start or after some reasoning).
+    - If no tool is needed, provide a rigorous, proof-level derivation.
+
+TOOL FORMAT:
+```json
+{
+  "tool": "python",
+  "code": "print('Hello World')",
+  "verify": "none"
+}
+```
+
+Formatting:
+- Use LaTeX for math: \( x^2 \) or \[ \int f(x) dx \].
+- Be concise but rigorous.
 """.strip()
 
 # -------------------------
@@ -440,7 +475,7 @@ except Exception as e:
     return run_python_sandbox(wrapper, timeout_s=timeout_s)
 
 # -------------------------
-# Model Call Wrapper
+# Model Call Wrappers
 # -------------------------
 def call_model_with_history(
     history: list, 
@@ -464,6 +499,27 @@ def call_model_with_history(
     )
     return resp.choices[0].message.content
 
+def call_expert_model(history: list, temperature: float = 0.6) -> str:
+    """
+    Calls the Expert Model (DeepSeek R1 via OpenRouter).
+    """
+    if len(history) > 80:
+        history = [history[0]] + history[-60:]
+
+    logger.info(f"EXPERT API Call | Model: {EXPERT_MODEL} | Temp: {temperature}")
+    
+    # R1 works best with temperature around 0.6
+    resp = or_client.chat.completions.create(
+        model=EXPERT_MODEL,
+        messages=history,
+        max_tokens=8192,
+        temperature=temperature,
+        extra_body={
+            "transforms": ["middle-out"]
+        }
+    )
+    return resp.choices[0].message.content
+
 # -------------------------
 # Tool Parsing
 # -------------------------
@@ -475,7 +531,12 @@ def parse_tool_instruction(text: str):
 
     # Hard guard: must start with JSON
     if not text.startswith("{"):
-        return None
+        # EXPERT MODE: Sometimes wraps in ```json ... ```
+        match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if match:
+            text = match.group(1)
+        else:
+            return None
 
     try:
         obj = json.loads(text)
@@ -505,6 +566,13 @@ class ResearchSession:
     def append_assistant(self, text: str):
         self.history.append({"role":"assistant","content":text})
         self._save()
+    
+    def set_system_prompt(self, prompt: str):
+        """Overrides the system prompt for the current turn if needed."""
+        if self.history and self.history[0].get("role") == "system":
+            self.history[0]["content"] = prompt
+        else:
+            self.history.insert(0, {"role": "system", "content": prompt})
 
     def _save(self):
         self._data["messages"] = self.history
@@ -534,6 +602,8 @@ def strip_tool_json(text: str) -> str:
     stripped = text.strip()
 
     # If model leaked tool JSON, suppress it entirely
+    # Check for ```json ... ``` wrapper too
+    stripped = re.sub(r"```json\s*\{.*?\}\s*```", "", stripped, flags=re.DOTALL)
     if stripped.startswith("{") and '"tool"' in stripped:
         return ""
 
@@ -572,7 +642,16 @@ def requires_tool(text: str) -> bool:
         "wavefunction", "schrodinger",
         "laplace", "fourier", "z-transform",
         "numerical method", "newton method",
-        "iteration", "convergence"
+        "iteration", "convergence",
+        "simplify", "expand", "factor", "rank", "inverse",
+        "nullspace", "trace", "modulo", "gcd", "lcm",
+        "prime", "factorial", "permutation", "combination",
+        "coefficient", "mean", "median", "mode", "standard deviation",
+        "correlation", "regression", "least squares",
+        "extrema", "maxima", "minima", "optimization",
+        "jacobian", "hessian", "gradient", "divergence", "curl",
+        "laplacian", "taylor", "maclaurin", "fourier series",
+        "boltzmann", "planck", "wavelength", "refraction"
     ]
 
     if any(k in t for k in numeric_keywords):
@@ -617,14 +696,43 @@ def extract_strict_json(text: str):
 
     text = text.strip()
 
-    # Must start with {
-    if not text.startswith("{"):
-        return None
+    # 1. Try to find Markdown JSON block first (most reliable if present)
+    match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except:
+            pass
 
-    try:
-        return json.loads(text)
-    except Exception:
-        return None
+    # 2. Try to find any JSON object that looks like a tool call
+    # We scan for the first '{' and try to find a balanced closing '}'
+    # that results in a valid JSON object containing "tool": "python"
+    
+    start_indices = [m.start() for m in re.finditer(r'\{', text)]
+    
+    for start in start_indices:
+        balance = 0
+        for i in range(start, len(text)):
+            char = text[i]
+            if char == '{':
+                balance += 1
+            elif char == '}':
+                balance -= 1
+            
+            if balance == 0:
+                # Potential JSON block found
+                candidate = text[start:i+1]
+                # Fast pre-check before parsing
+                if '"tool"' in candidate: 
+                    try:
+                        obj = json.loads(candidate)
+                        if obj.get("tool") == "python":
+                            return obj
+                    except:
+                        pass
+                break # Move to next start if this block was balanced but invalid
+                
+    return None
 
 def requires_numeric_tool(text: str) -> bool:
     keywords = [
@@ -701,8 +809,78 @@ def handle_message(
     session.append_user(user_text)
 
     # =========================================================
-    # PHASE 1: PLANNING / INITIAL RESPONSE
+    # SPECIAL MODE: EXPERT (DeepSeek R1)
     # =========================================================
+    if reasoning_level == "expert":
+        # Switch system prompt temporarily or permanently for this session?
+        # For simplicity, we assume session is consistent, but let's just force the prompt content
+        session.set_system_prompt(SYSTEM_PROMPT_EXPERT)
+        
+        # Expert mode is simpler: It just calls R1. R1 is smart enough to plan/execute.
+        # We allow it to return tool calls if it wants, but we don't force it as strictly.
+        assistant_raw = call_expert_model(session.history)
+        
+        # Check if R1 decided to use a tool (formatted in JSON block)
+        tool_inst = extract_strict_json(assistant_raw)
+
+        # RETRY: If tool appears required but wasn't used, force it once.
+        if tool_inst is None and requires_tool(user_text):
+            logger.info("EXPERT: Tool required but missing. Forcing verification.")
+            session.append_user(
+                "Verify this result using Python. Output the JSON tool block."
+            )
+            assistant_raw = call_expert_model(session.history)
+            tool_inst = extract_strict_json(assistant_raw)
+        
+        tool_output = None
+        
+        if tool_inst:
+            code = tool_inst.get("code", "")
+            verify_mode = tool_inst.get("verify", "none")
+            
+            logger.info(f"EXPERT TOOL EXECUTION: {verify_mode}")
+            
+            if verify_mode == "sympy":
+                stdout, stderr, rc = run_sympy_check(code)
+            else:
+                stdout, stderr, rc = run_python_sandbox(code)
+            
+            tool_output = {
+                "stdout": stdout or "",
+                "stderr": stderr or "",
+                "rc": rc,
+                "verify": verify_mode
+            }
+            
+            # Feed result back to Expert R1
+            session.append_user(
+                f"TOOL OUTPUT:\n{stdout[:12000]}\nSTDERR:\n{stderr}\n\n"
+                "Please interpret this result and provide the final expert answer."
+            )
+            
+            final_answer = call_expert_model(session.history)
+            
+            session.append_assistant(final_answer)
+            return {
+                "reply": wrap_pure_math(final_answer),
+                "raw": assistant_raw,
+                "tool_output": tool_output
+            }
+        
+        # No tool used, direct answer
+        session.append_assistant(assistant_raw)
+        return {
+            "reply": wrap_pure_math(assistant_raw),
+            "raw": assistant_raw,
+            "tool_output": None
+        }
+
+    # =========================================================
+    # PHASE 1: PLANNING / INITIAL RESPONSE (Standard Modes)
+    # =========================================================
+    # Ensure standard prompt
+    session.set_system_prompt(SYSTEM_PROMPT)
+
     assistant_raw = call_model_with_history(
         session.history,
         reasoning_level=reasoning_level,
@@ -1681,6 +1859,7 @@ HTML_PAGE = r"""
                 <li role="option" data-value="low">Fast</li>
                 <li role="option" data-value="medium">Balanced</li>
                 <li role="option" data-value="high" class="selected">Research</li>
+                <li role="option" data-value="expert">Expert</li>
             </ul>
         </div>
 
@@ -1957,3 +2136,4 @@ if __name__ == "__main__":
     @app.route('/')
     def root(): return Response('<a href="/rigor">Go to ZYLO RIGOR</a>')
     app.run(host="0.0.0.0", port=50051, debug=False)
+
