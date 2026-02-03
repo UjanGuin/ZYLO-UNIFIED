@@ -60,6 +60,7 @@ This repository functions as the unification and orchestration layer for the ZYL
 
 ZYLO UNIFIED brings together the following research projects:
 
+* **ZYLO ZENITH** — Unified Multi-Model Intelligence & Media Engine
 * **ZYLO LINK** — Secure real‑time communication with AI integration
 * **ZYLO RiG0R** — Formal mathematics and physics verification engine
 * **ZYLO CLOUD** — Private, self‑hosted cloud storage and filesystem
@@ -100,13 +101,13 @@ ZYLO UNIFIED deliberately combines **all of them** under a **shared identity, sh
                       │    System Orchestrator  │
                       └───────────┬─────────────┘
                                   │
-        ┌───────────────┬─────────┼─────────┬───────────────┐
-        │               │                   │               │
-┌───────▼────────┐ ┌────▼───────┐   ┌───────▼───────┐ ┌─────▼───────┐
-│   ZYLO LINK    │ │ ZYLO CLOUD │   │   ZYLO VEIL   │ │  ZYLO RiG0R │
-│ Secure Chat    │ │ Private FS │   │ Stego/Crypto  │ │ Verification│
-│ + AI Interface │ │ Offline    │   │ Destructive   │ │ Math/Physics│
-└────────────────┘ └────────────┘   └───────────────┘ └─────────────┘
+        ┌─────────┬───────────────┼───────────────┬─────────┐
+        │         │               │               │         │
+┌───────▼────┐ ┌──▼────────┐ ┌────▼───────┐   ┌───▼───────┐ ┌───▼─────────┐
+│ ZYLO LINK  │ │ZYLO ZENITH│ │ ZYLO CLOUD │   │ ZYLO VEIL │ │  ZYLO RiG0R │
+│ Secure Chat│ │Multi-Model│ │ Private FS │   │Stego/Crypto││ Verification│
+│ + AI       │ │ AI Engine │ │ Offline    │   │Destructive│ │ Math/Physics│
+└────────────┘ └───────────┘ └────────────┘   └───────────┘ └─────────────┘
 
 
 ```
@@ -201,6 +202,14 @@ A formal verification engine for AI outputs.
   <img src="assets/19.jpeg" width="18.5%"/>
 </p>
 
+### 5. ZYLO ZENITH (`AI~Zenith.py`)
+A premium, multi-model unified intelligence interface.
+*   **Multi-Model Orchestration**: Seamless switching between OpenAI, Google Gemini, OpenRouter, and Cerebras models.
+*   **Real-time Web Search**: Integrated Tavily/ZenRows search for up-to-date information retrieval.
+*   **Multimodal Generation**: Create images and videos using ZhipuAI's CogView and CogVideoX.
+*   **Neural TTS**: High-quality voice synthesis via NVIDIA Magpie (requires external script) or gTTS fallback.
+*   **Reasoning Toggle**: Enable "Chain of Thought" reasoning for complex problem solving (supports DeepSeek R1, Kimi k2).
+
 ---
 
 ## Intended Use Cases
@@ -258,9 +267,21 @@ export GROQ_API_KEY="gsk_..."  # Optional, falls back to internal key
 # ZYLO RiG0R (Compute)
 export CEREBRAS_API_KEY="csk-..."
 export OSS_SERVER_DATA="./oss_server_data"
+
+# ZYLO ZENITH (Multi-Model AI)
+export NVIDIA_API_KEY="nvapi-..."
+export GEMINI_API_KEY="AIza..."
+export ZHIPU_API_KEY="..."
+export OPENROUTER_API_KEY="sk-or-..."
+export TAVILY_API_KEY="tvly-..."
+export ZENROWS_API_KEY="..."
+export TTS_TALK_SCRIPT="/path/to/talk.py" # Optional, for NVIDIA TTS
+
+# ZYLO CLOUD
+export CLOUD_PASSWORD="your_password"
 ```
 
-*Note: Some keys are hardcoded in the source for development convenience (`7149` for Cloud password, dev keys for AI). **Change these immediately for any real deployment.***
+*Note: Some keys have default development values in the source. **Change these immediately for any real deployment.***
 
 ### 4. Run the Platform
 The main entry point is `app.py`, which utilizes `socketio` to run the server.
@@ -278,7 +299,7 @@ By default, the server runs on **port 5001**:
 
 Once running, navigate to the landing page. You will see three main cards and a hidden access point:
 
-1.  **ZYLO AI**: Opens the modal to access **RiG0R** (Research Engine).
+1.  **ZYLO AI**: Opens the modal to access **RiG0R** (Research Engine) or **ZENITH** (Unified AI).
 2.  **ZYLO LINK**: Opens the secure chat application.
 3.  **ZYLO CLOUD**: Opens the file storage vault.
 4.  **ZYLO VEIL**: Accessed via a **secret gesture** on the landing page (click/drag on the subtitle "Unified Digital Intelligence" more than 100px) or directly at `/veil`.
