@@ -41,7 +41,7 @@ This repository functions as the unification and orchestration layer for the ZYL
 </p>
 
 <p align="center">
-  <img src="assets/ui2.png" width="800" alt="ZYLO LINK UI Preview 4">
+  <img src="assets/u100.png" width="800" alt="ZYLO LINK UI Preview 4">
 </p>
 
 ---
