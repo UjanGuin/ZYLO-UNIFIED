@@ -3,50 +3,85 @@ import os
 import time
 import shutil
 import mimetypes
+import sqlite3
 from pathlib import Path
 from flask import (
     Flask, request, render_template_string, send_from_directory,
-    jsonify, abort, redirect, url_for, session, Blueprint
+    jsonify, abort, redirect, url_for, session, Blueprint, current_app
 )
 from werkzeug.utils import secure_filename
 
 # =========================
 # CONFIG
 # =========================
-ADMIN_PASSWORD = "7149"
-SD_CARD_PATH = Path("/media/ujan/UJAN-AI").resolve()   # adjust if needed
+ADMIN_PASSWORD = os.getenv("CLOUD_PASSWORD", "7149")
+SD_CARD_PATH = Path("/media/ujan/Local Disk").resolve()   # adjust if needed
 MAX_CONTENT_LENGTH_MB = 4096         # 1 GB max per request
 ALLOWED_PREVIEW_TEXT = ('.txt', '.md', '.csv', '.log', '.json', '.py', '.html', '.ino')
+DB_FILE = 'ZYLO_chat.db'
 
-SD_CARD_PATH.mkdir(parents=True, exist_ok=True)
+# Ensure base path exists
+try:
+    SD_CARD_PATH.mkdir(parents=True, exist_ok=True)
+except Exception:
+    SD_CARD_PATH = Path("cloud_vault").resolve()
+    SD_CARD_PATH.mkdir(parents=True, exist_ok=True)
 
 # Flask Blueprint
 cloud_bp = Blueprint('cloud', __name__, url_prefix='/cloud')
-# Note: secret_key and config must be set in the main app
-# app = Flask(__name__)
-# app.secret_key = os.environ.get("UJAN_SECRET_KEY", "very_secret_key_change_me")
-# app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
 
 # =========================
 # UTILITIES
 # =========================
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def resolve_path(rel: str) -> Path:
+    user_id = session.get("user_id")
+    if not user_id:
+        raise ValueError("No user in session")
+    
+    user_root = SD_CARD_PATH / user_id
+    user_root.mkdir(parents=True, exist_ok=True)
+
     if not rel or rel == '/':
-        return SD_CARD_PATH
+        return user_root
     rel = str(rel).lstrip("/")
-    candidate = (SD_CARD_PATH / rel).resolve()
+    candidate = (user_root / rel).resolve()
     try:
-        candidate.relative_to(SD_CARD_PATH)
+        candidate.relative_to(user_root)
     except Exception:
         raise ValueError("Invalid path")
     return candidate
 
+def get_dir_size(path: Path) -> int:
+    """Calculate total size of a directory in bytes."""
+    total = 0
+    if not path.exists(): return 0
+    for entry in path.rglob('*'):
+        if entry.is_file():
+            try:
+                total += entry.stat().st_size
+            except Exception: pass
+    return total
+
+def get_user_quota(user_id: str) -> int:
+    try:
+        db = get_db()
+        user = db.execute("SELECT storage_quota FROM users WHERE user_id=?", (user_id,)).fetchone()
+        db.close()
+        return user['storage_quota'] if user and user['storage_quota'] else 1073741824
+    except Exception:
+        return 1073741824
+
 def human_size(num_bytes: int) -> str:
     for unit in ["B", "KB", "MB", "GB", "TB"]:
         if num_bytes < 1024.0:
-            return f"{num_bytes:.02f} {unit}"
+            return f"{num_bytes:.2f} {unit}"
         num_bytes /= 1024.0
-    return f"{num_bytes:.02f} PB"
+    return f"{num_bytes:.2f} PB"
 
 def safe_filename(name: str) -> str:
     name = os.path.basename(name)
@@ -95,25 +130,36 @@ def list_directory(dirpath: Path):
     return items
 
 # =========================
-# AUTH (simple)
+# AUTH
 # =========================
 def logged_in():
-    return session.get("ujan_authenticated", False)
+    return session.get("cloud_authenticated", False) and session.get("user_id") is not None
 
 @cloud_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        username = request.form.get("username", "").strip()
         pwd = request.form.get("password", "")
+        
         if pwd == ADMIN_PASSWORD:
-            session["ujan_authenticated"] = True
-            return redirect(url_for("cloud.index"))
+            db = get_db()
+            user = db.execute("SELECT user_id, username FROM users WHERE username=?", (username,)).fetchone()
+            db.close()
+            
+            if user:
+                session["user_id"] = user["user_id"]
+                session["username"] = user["username"]
+                session["cloud_authenticated"] = True
+                return redirect(url_for("cloud.index"))
+            else:
+                return render_template_string(LOGIN_PAGE, error="User not found in ZYLO Link.", sd=SD_CARD_PATH)
         else:
-            return render_template_string(LOGIN_PAGE, error="Incorrect password", sd=SD_CARD_PATH)
+            return render_template_string(LOGIN_PAGE, error="Incorrect access key", sd=SD_CARD_PATH)
     return render_template_string(LOGIN_PAGE, error=None, sd=SD_CARD_PATH)
 
 @cloud_bp.route("/logout")
 def logout():
-    session.pop("ujan_authenticated", None)
+    session.pop("cloud_authenticated", None)
     return render_template_string(LOGOUT_PAGE)
 
 @cloud_bp.before_request
@@ -122,7 +168,7 @@ def require_login():
         return
     if request.path.startswith("/ngrok") or request.path.startswith("/public"):
         return
-    if not logged_in() and request.path != url_for("cloud.login"):
+    if not logged_in():
         return redirect(url_for("cloud.login"))
 
 # =========================
@@ -185,6 +231,7 @@ LOGIN_PAGE = """
       color: white;
       border-radius: 12px;
       padding: 12px 16px;
+      margin-bottom: 15px;
     }
     .form-control:focus {
       background: rgba(255,255,255,0.08);
@@ -216,8 +263,7 @@ LOGIN_PAGE = """
 <body>
   <div class="login-card">
     <div class="brand"><i class="fa-solid fa-cloud-bolt me-2"></i>ZYLO CLOUD</div>
-    <!-- Removed text-muted to make it white -->
-    <p class="text-center small mb-4 text-white">Enter administrative password</p>
+    <p class="text-center small mb-4 text-white">Identify and Unlock Vault</p>
     
     {% if error %}
     <div class="alert alert-glass mb-4">
@@ -227,9 +273,11 @@ LOGIN_PAGE = """
     
     <form method="post">
       <div class="mb-3">
-        <!-- Removed text-muted to make it white -->
+        <label class="form-label small text-white">ZYLO Username</label>
+        <input name="username" type="text" class="form-control" placeholder="User Name" required autofocus>
+        
         <label class="form-label small text-white">Access Key</label>
-        <input name="password" type="password" class="form-control" placeholder="••••••••" autofocus>
+        <input name="password" type="password" class="form-control" placeholder="••••••••" required>
       </div>
       <div class="d-grid">
         <button class="btn btn-unlock">Unlock Vault</button>
@@ -237,7 +285,6 @@ LOGIN_PAGE = """
     </form>
     
     <div class="mt-4 pt-3 border-top border-white border-opacity-10">
-       <!-- Removed text-muted to make Secure Host white -->
        <div class="d-flex align-items-center gap-2 text-white" style="font-size: 0.75rem;">
           <i class="fa-solid fa-microchip"></i>
           <span>Secure Host: {{ sd }}</span>
@@ -326,7 +373,6 @@ LOGOUT_PAGE = """
 </html>
 """
 
-# MAIN PAGE with explicit fixes for the white control/header row
 MAIN_PAGE = """
 <!doctype html>
 <html lang="en">
@@ -541,6 +587,11 @@ MAIN_PAGE = """
 
 <div class="container-hero">
   
+  <div id="storage-warning" class="alert alert-danger border-0 glass-card mb-3 d-none animate-row" style="background: rgba(239, 68, 68, 0.1); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.2) !important;">
+    <i class="fa-solid fa-triangle-exclamation me-2"></i>
+    <strong>Storage Warning:</strong> You have reached your account storage limit. Please delete some files to upload more.
+  </div>
+
   <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-3">
     <div class="path-bar w-100 w-sm-auto">
       <button id="btn-back" class="btn btn-link p-0 text-white me-2" style="border:none">
@@ -658,6 +709,12 @@ MAIN_PAGE = """
     return window.location.origin + '/cloud' + path;
   }
 
+  function humanSizeJS(bytes) {
+    if (bytes === 0) return '0 B';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB', 'TB'][i];
+  }
+
   async function loadFiles() {
     try {
       pathDisplay.textContent = currentPath;
@@ -677,7 +734,16 @@ MAIN_PAGE = """
       const res = await fetch(api('/stats'));
       if (res.ok) {
         const data = await res.json();
-        if(!data.error) storageInfo.textContent = `${data.free} Free / ${data.total}`;
+        if(!data.error) {
+            storageInfo.textContent = `${data.used} / ${data.total}`;
+            
+            const warning = document.getElementById('storage-warning');
+            if (data.used === data.total || (data.used.includes('GB') && data.total.includes('GB') && parseFloat(data.used) >= parseFloat(data.total))) {
+                warning.classList.remove('d-none');
+            } else {
+                warning.classList.add('d-none');
+            }
+        }
       }
     } catch(e) {}
   }
@@ -838,9 +904,40 @@ MAIN_PAGE = """
 
   async function uploadFiles(files) {
     const statusDiv = document.getElementById('upload-status');
+    
+    // Refresh stats to get the latest quota/used info before starting
+    const statsRes = await fetch(api('/stats'));
+    const stats = await statsRes.json();
+    
+    // Parse units to bytes for accurate comparison
+    function toBytes(str) {
+        if (!str || str === 'n/a') return 0;
+        const parts = str.trim().split(' ');
+        const num = parseFloat(parts[0]);
+        const unit = parts[1].toUpperCase();
+        const units = { 'B': 1, 'KB': 1024, 'MB': 1048576, 'GB': 1073741824, 'TB': 1099511627776 };
+        return num * (units[unit] || 1);
+    }
+
+    const totalBytes = toBytes(stats.total);
+    const usedBytes = toBytes(stats.used);
+    const freeBytes = totalBytes - usedBytes;
+
     for (const f of files) {
       const entry = document.createElement('div');
       entry.className = 'glass-card p-3 mb-2 shadow-lg';
+      
+      // Client-side pre-check
+      if (f.size > freeBytes) {
+          entry.innerHTML = `<div class="text-danger small"><i class="fa-solid fa-circle-xmark me-1"></i> ${f.name} is too large (${humanSizeJS(f.size)}). Limit: ${stats.free} left.</div>`;
+          statusDiv.appendChild(entry);
+          setTimeout(() => entry.remove(), 5000);
+          
+          // Trigger the red banner immediately
+          document.getElementById('storage-warning').classList.remove('d-none');
+          continue;
+      }
+
       entry.innerHTML = `<div class="d-flex justify-content-between small mb-1"><span class="text-truncate me-2">${f.name}</span><span class="pct">0%</span></div><div class="progress" style="height:4px"><div class="progress-bar bg-info" style="width:0%"></div></div>`;
       statusDiv.appendChild(entry);
 
@@ -855,8 +952,25 @@ MAIN_PAGE = """
           entry.querySelector('.progress-bar').style.width = p + '%';
           entry.querySelector('.pct').textContent = p + '%';
         };
-        xhr.onload = () => { setTimeout(() => entry.remove(), 1500); resolve(); };
-        xhr.onerror = () => { entry.innerHTML = `<div class="text-danger small">Error: ${f.name}</div>`; resolve(); };
+        
+        xhr.onload = () => { 
+          if (xhr.status === 200) {
+              entry.querySelector('.progress-bar').className = 'progress-bar bg-success';
+              setTimeout(() => entry.remove(), 1500); 
+          } else {
+              const errorMsg = xhr.status === 413 ? "Quota Exceeded" : "Upload Failed";
+              entry.innerHTML = `<div class="text-danger small"><i class="fa-solid fa-circle-exclamation me-1"></i> ${errorMsg}: ${f.name}</div>`;
+              setTimeout(() => entry.remove(), 4000);
+          }
+          resolve(); 
+        };
+        
+        xhr.onerror = () => { 
+          entry.innerHTML = `<div class="text-danger small">Network Error: ${f.name}</div>`; 
+          setTimeout(() => entry.remove(), 4000);
+          resolve(); 
+        };
+        
         xhr.open('POST', api('/upload'));
         xhr.send(form);
       });
@@ -915,150 +1029,114 @@ def index():
 
 @cloud_bp.route("/list")
 def api_list():
-    rel = request.args.get("path", "/")
     try:
+        rel = request.args.get("path", "/")
         dirpath = resolve_path(rel)
-    except ValueError:
-        return jsonify({"error":"invalid path"}), 400
-    items = list_directory(dirpath)
-    rel_out = "/" if dirpath == SD_CARD_PATH else str(dirpath.relative_to(SD_CARD_PATH)).replace(os.sep, '/')
-    rel_out = '/' + rel_out.strip('/') if rel_out != '/' else '/'
-    return jsonify({"path": rel_out, "items": items})
+        user_id = session.get("user_id")
+        user_root = SD_CARD_PATH / user_id
+        items = list_directory(dirpath)
+        rel_out = "/" if dirpath == user_root else "/" + str(dirpath.relative_to(user_root)).replace(os.sep, '/')
+        return jsonify({"path": rel_out, "items": items})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @cloud_bp.route("/upload", methods=["POST"])
 def upload():
-    path = request.form.get('path') or request.args.get('path') or '/'
     try:
+        path = request.form.get('path') or '/'
+        user_id = session.get("user_id")
         target_dir = resolve_path(path)
-    except ValueError:
-        return ("Invalid path", 400)
-    if not target_dir.exists() or not target_dir.is_dir():
-        return ("Target directory doesn't exist", 400)
-    if 'file' not in request.files:
-        return ("No file part", 400)
-    f = request.files['file']
-    if f.filename == '':
-        return ("No selected file", 400)
-    fname = safe_filename(f.filename)
-    dest = unique_save_path(target_dir, fname)
-    f.save(str(dest))
-    return ("OK", 200)
+        user_root = SD_CARD_PATH / user_id
+        if 'file' not in request.files: return "No file", 400
+        f = request.files['file']
+        
+        # Quota check
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        f.seek(0)
+        
+        quota = get_user_quota(user_id)
+        used = get_dir_size(user_root)
+        
+        if used + size > quota:
+            return ("Quota exceeded", 413)
+
+        fname = safe_filename(f.filename)
+        dest = unique_save_path(target_dir, fname)
+        f.save(str(dest))
+        return "OK"
+    except Exception as e:
+        return str(e), 400
 
 @cloud_bp.route("/mkdir", methods=["POST"])
 def mkdir():
-    data = request.get_json() or {}
-    name = data.get('name', '').strip()
-    path = data.get('path', '/')
-    if not name:
-        return ("Missing name", 400)
     try:
+        data = request.get_json()
+        path = data.get('path', '/')
+        name = safe_filename(data.get('name', 'new_folder'))
         target_dir = resolve_path(path)
-    except ValueError:
-        return ("Invalid path", 400)
-    new_dir = target_dir / safe_filename(name)
-    try:
-        new_dir.mkdir(exist_ok=False)
-    except FileExistsError:
-        return ("Exists", 409)
-    except Exception:
-        return ("Create failed", 500)
-    return ("OK", 200)
+        (target_dir / name).mkdir(exist_ok=True)
+        return "OK"
+    except Exception as e:
+        return str(e), 400
 
 @cloud_bp.route("/download")
 def download():
-    rel = request.args.get('path', '/')
-    name = request.args.get('name', '')
     try:
+        rel = request.args.get('path', '/')
+        name = safe_filename(request.args.get('name', ''))
         dirpath = resolve_path(rel)
-    except ValueError:
-        abort(400)
-    if not name:
+        return send_from_directory(str(dirpath), name, as_attachment=True)
+    except Exception:
         abort(404)
-    name = safe_filename(name)
-    file_path = dirpath / name
-    if not file_path.exists() or not file_path.is_file():
-        abort(404)
-    return send_from_directory(str(dirpath), name, as_attachment=True)
 
 @cloud_bp.route("/preview")
 def preview():
-    rel = request.args.get('path', '/')
-    name = request.args.get('name', '')
     try:
+        rel = request.args.get('path', '/')
+        name = safe_filename(request.args.get('name', ''))
         dirpath = resolve_path(rel)
-    except ValueError:
-        abort(400)
-    if not name:
+        file_path = dirpath / name
+        
+        if file_path.suffix.lower() in ALLOWED_PREVIEW_TEXT:
+            ctype = "text/plain"
+        else:
+            ctype, _ = mimetypes.guess_type(str(file_path))
+            
+        if not ctype: ctype = "application/octet-stream"
+        return send_from_directory(str(dirpath), name, as_attachment=False, mimetype=ctype)
+    except Exception:
         abort(404)
-    name = safe_filename(name)
-    file_path = dirpath / name
-    if not file_path.exists() or not file_path.is_file():
-        abort(404)
-
-    if file_path.suffix.lower() in ALLOWED_PREVIEW_TEXT:
-        ctype = "text/plain"
-    else:
-        ctype, _ = mimetypes.guess_type(str(file_path))
-
-    if ctype is None:
-        ctype = "application/octet-stream"
-    return send_from_directory(str(dirpath), name, as_attachment=False, mimetype=ctype)
 
 @cloud_bp.route("/delete", methods=["POST"])
 def delete():
-    data = request.get_json() or {}
-    names = data.get("names", [])
-    path = data.get("path", "/")
-    if not isinstance(names, list) or not names:
-        return ("Bad request", 400)
     try:
-        dirpath = resolve_path(path)
-    except ValueError:
-        return ("Invalid path", 400)
-    failed = []
-    for n in names:
-        fname = safe_filename(n)
-        target = dirpath / fname
-        try:
+        data = request.get_json()
+        dirpath = resolve_path(data.get("path", "/"))
+        for n in data.get("names", []):
+            target = dirpath / safe_filename(n)
             if target.exists():
-                if target.is_dir():
-                    try:
-                        shutil.rmtree(target)
-                    except Exception:
-                        failed.append(n)
-                else:
-                    target.unlink()
-            else:
-                failed.append(n)
-        except Exception:
-            failed.append(n)
-    if failed:
-        return jsonify({"status":"partial","failed":failed}), 207
-    return ("OK", 200)
+                if target.is_dir(): shutil.rmtree(target)
+                else: target.unlink()
+        return "OK"
+    except Exception as e:
+        return str(e), 400
 
 @cloud_bp.route("/stats")
 def stats():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error":"n/a"})
     try:
-        st = os.statvfs(str(SD_CARD_PATH))
-        free = st.f_bavail * st.f_frsize
-        total = st.f_blocks * st.f_frsize
-        used = total - free
-        return jsonify({"free": human_size(free), "used": human_size(used), "total": human_size(total)})
+        user_root = SD_CARD_PATH / user_id
+        user_root.mkdir(parents=True, exist_ok=True)
+        used = get_dir_size(user_root)
+        total = get_user_quota(user_id)
+        free = max(0, total - used)
+        return jsonify({
+            "used": human_size(used), 
+            "total": human_size(total),
+            "free": human_size(free)
+        })
     except Exception:
         return jsonify({"error":"n/a"})
-
-# =========================
-# START
-# =========================
-if __name__ == "__main__":
-    print("🚀 Server running !")
-    app = Flask(__name__)
-    app.secret_key = "dev_key"
-    app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
-    app.register_blueprint(cloud_bp, url_prefix='/cloud')
-    # For standalone, we might want to redirect root to /cloud
-    @app.route('/')
-    def root(): return redirect('/cloud')
-    app.run(port=50000)
-
-
