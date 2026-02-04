@@ -36,23 +36,24 @@ except ImportError:
     HAS_ZHIPU = False
 
 # ====================== CONFIGURATION ======================
-API_KEY = "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"
-BASE_URL = "https://integrate.api.nvidia.com/v1"
-GEMINI_API_KEY = "AIzaSyA-P_5BvsOqJ8OKsT1wo9qep86Baaq0Vl0"
-ZHIPU_API_KEY = "642a5c77f75141ceb178ed3106bf8a83.ETf0547Pst0azRUL"
+API_KEY = os.getenv("NVIDIA_API_KEY", "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")
+BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyA-P_5BvsOqJ8OKsT1wo9qep86Baaq0Vl0")
+ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "642a5c77f75141ceb178ed3106bf8a83.ETf0547Pst0azRUL")
 
 # NEW KEYS
-OPENROUTER_API_KEY = "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"
-TAVILY_API_KEY = "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"
-ZENROWS_API_KEY = "52e3f8ac45c2e7601a919a42111df7dd7ca1b9b5"
-CEREBRAS_API_KEY = "csk-vwm5r6wnyrk2nkwyfnxdhc8yc5n3xy3tvjc6pehtmdwvpv56"
+OPENROUTER_API_KEY = "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"
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "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")
+ZENROWS_API_KEY = os.getenv("ZENROWS_API_KEY", "52e3f8ac45c2e7601a919a42111df7dd7ca1b9b5")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "csk-vwm5r6wnyrk2nkwyfnxdhc8yc5n3xy3tvjc6pehtmdwvpv56")
+SCRAPERAPI_KEY = "00a3ca6f13d8a07a87512e583cc27b57"
 
 # NVIDIA TTS (from voice.py)
-TTS_API_KEY = "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"
-TTS_FUNCTION_ID = "877104f7-e885-42b9-8de8-f6e4c6303969"
-TTS_SERVER = "grpc.nvcf.nvidia.com:443"
+TTS_API_KEY = os.getenv("NVIDIA_TTS_API_KEY", "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")
+TTS_FUNCTION_ID = os.getenv("NVIDIA_TTS_FUNCTION_ID", "877104f7-e885-42b9-8de8-f6e4c6303969")
+TTS_SERVER = os.getenv("NVIDIA_TTS_SERVER", "grpc.nvcf.nvidia.com:443")
 # Use absolute path found via search to ensure it works regardless of CWD
-TTS_TALK_SCRIPT = "/home/ujan/python-clients/scripts/tts/talk.py"
+TTS_TALK_SCRIPT = os.getenv("TTS_TALK_SCRIPT", "/home/ujan/python-clients/scripts/tts/talk.py")
 
 # Voices mapped to Magpie-Multilingual styles (distinct)
 VOICES = [
@@ -68,13 +69,13 @@ MODELS = [
     {"id": "openai/gpt-oss-120b", "name": "ChatGPT", "desc": "Powerful open model", "reasoning": True, "provider": "nvidia", "extra_body": None},
     {"id": "google/gemini-3-flash-preview", "name": "Gemini 3", "desc": "Multimodal - images, video, audio", "reasoning": True, "provider": "google", "extra_body": None},
     {"id": "z-ai/glm4.7", "name": "GLM-4.7", "desc": "Strong coding & math specialist", "reasoning": True, "provider": "nvidia", "extra_body": {"chat_template_kwargs": {"enable_thinking": True, "clear_thinking": False}}, "temperature": 1, "top_p": 1, "max_tokens": 16384},
-    {"id": "moonshotai/kimi-k2-thinking", "name": "Kimi K2 Thinking", "desc": "Advanced agentic reasoning", "reasoning": True, "provider": "nvidia", "extra_body": None, "temperature": 1, "top_p": 0.9, "max_tokens": 16384},
+    {"id": "moonshotai/kimi-k2.5", "name": "Kimi K2.5", "desc": "Advanced multimodal reasoning", "reasoning": True, "provider": "nvidia", "extra_body": {"chat_template_kwargs": {"thinking": True}}, "temperature": 1, "top_p": 1, "max_tokens": 16384},
     {"id": "deepseek-ai/deepseek-v3.2", "name": "DeepSeek V3.2", "desc": "General purpose reasoning", "reasoning": True, "provider": "nvidia", "extra_body": {"chat_template_kwargs": {"thinking": True}}, "temperature": 1, "top_p": 0.95, "max_tokens": 8192},
     {"id": "minimaxai/minimax-m2.1", "name": "MiniMax M2.1", "desc": "Efficient reasoning agent", "reasoning": True, "provider": "nvidia", "extra_body": {"chat_template_kwargs": {"thinking": True}}},
     {"id": "qwen/qwen3-coder-480b-a35b-instruct", "name": "Qwen3 Coder", "desc": "Specialized coding assistant", "reasoning": False, "provider": "nvidia", "extra_body": None},
-    {"id": "meta/llama-3.1-405b-instruct", "name": "Llama", "desc": "Largest open Llama", "reasoning": False, "provider": "nvidia", "extra_body": None},
+    {"id": "meta/llama-3.1-405b-instruct", "name": "Llama 405b", "desc": "Largest open Llama", "reasoning": False, "provider": "nvidia", "extra_body": None},
     {"id": "nvidia/llama-3.1-nemotron-ultra-253b-v1", "name": "Nemotron Ultra 253B", "desc": "Advanced Nemotron variant", "reasoning": True, "provider": "nvidia", "extra_body": {"chat_template_kwargs": {"thinking": True}}, "temperature": 0.6, "max_tokens": 4096},
-    {"id": "mistralai/mistral-large-3-675b-instruct-2512", "name": "Mistral", "desc": "High-performance multilingual", "reasoning": False, "provider": "nvidia", "extra_body": None}
+    {"id": "mistralai/mistral-large-3-675b-instruct-2512", "name": "Mistral 675b", "desc": "High-performance multilingual", "reasoning": False, "provider": "nvidia", "extra_body": None}
 ]
 
 # ====================== INITIALIZE CLIENTS ======================
@@ -147,6 +148,45 @@ def web_search(query):
         print(f"ZenRows search failed: {e}")
     
     return "Search failed to return results."
+
+def deep_search(query):
+    """Deep Research using ScraperAPI structured Google search."""
+    try:
+        payload = { 'api_key': SCRAPERAPI_KEY, 'query': query }
+        response = requests.get('https://api.scraperapi.com/structured/google/search/v1', params=payload, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            organic_results = data.get('organic_results', [])
+            results = []
+            for r in organic_results[:8]: # Get up to 8 results for deep research
+                title = r.get('title', 'No Title')
+                snippet = r.get('snippet', 'No Snippet')
+                link = r.get('link', '#')
+                results.append(f"- {title}: {snippet} ({link})")
+            
+            if results:
+                return "\n".join(results)
+            return "No results found in Deep Research."
+    except Exception as e:
+        print(f"ScraperAPI deep search failed: {e}")
+    
+    return "Deep Research failed."
+
+def fetch_url_content(url):
+    """Fetch full page content using ScraperAPI to bypass blocks."""
+    try:
+        payload = { 'api_key': SCRAPERAPI_KEY, 'url': url, 'render': 'true' }
+        response = requests.get('https://api.scraperapi.com/', params=payload, timeout=30)
+        if response.status_code == 200:
+            # Simple text extraction from HTML
+            text = re.sub(r'<script[^>]*>[\s\S]*?</script>', '', response.text)
+            text = re.sub(r'<style[^>]*>[\s\S]*?</style>', '', text)
+            text = re.sub(r'<[^>]+>', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text[:10000] # Return first 10k chars
+    except Exception as e:
+        print(f"ScraperAPI fetch failed for {url}: {e}")
+    return None
 
 if HAS_GEMINI:
     try:
@@ -305,10 +345,45 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
         .model-btn:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--accent-primary); }
         
         /* DROPDOWN - Improved z-index and styling */
-        .model-dropdown, .voice-dropdown { position: absolute; top: calc(100% + 8px); right: 0; width: 320px; background: #1a1a25; border: 1px solid var(--glass-border); border-radius: var(--border-radius); box-shadow: 0 10px 40px rgba(0,0,0,0.5); display: none; z-index: 101; max-height: 400px; overflow-y: auto; }
-        .voice-dropdown { width: 200px; }
-        .model-dropdown.show, .voice-dropdown.show { display: block; }
-        .model-option, .voice-option { padding: 14px 18px; cursor: pointer; transition: var(--transition); border-bottom: 1px solid var(--glass-border); }
+        .model-dropdown, .voice-dropdown { 
+            position: fixed; 
+            top: 80px; /* Default for desktop header area */
+            right: 20px; 
+            width: 320px; 
+            background: #1a1a25; 
+            border: 1px solid var(--glass-border); 
+            border-radius: var(--border-radius); 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); 
+            z-index: 2001; 
+            max-height: 400px; 
+            overflow-y: auto; 
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.2s, visibility 0.2s;
+            pointer-events: none;
+        }
+        .voice-dropdown { width: 200px; top: 80px; right: 350px; }
+        .model-dropdown.show, .voice-dropdown.show { 
+            visibility: visible !important; 
+            opacity: 1 !important; 
+            pointer-events: all !important; 
+        }
+        
+        #dropdownOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 2000;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #dropdownOverlay.show { visibility: visible !important; opacity: 1 !important; }
+        .model-option, .voice-option { padding: 16px 20px; cursor: pointer; transition: var(--transition); border-bottom: 1px solid var(--glass-border); }
         .model-option:last-child, .voice-option:last-child { border-bottom: none; }
         .model-option:hover, .voice-option:hover { background: rgba(99, 102, 241, 0.1); }
         .model-option.selected, .voice-option.selected { background: rgba(99, 102, 241, 0.15); border-left: 3px solid var(--accent-primary); }
@@ -365,6 +440,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
         .message-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.9em; }
         .message-content th, .message-content td { padding: 8px 12px; border: 1px solid var(--glass-border); text-align: left; }
         .message-content th { background: rgba(255, 255, 255, 0.05); font-weight: 600; }
+        .message-content hr { border: none; border-top: 1px solid var(--glass-border); margin: 16px 0; }
         
         /* Code block styles */
         .code-block-wrapper { position: relative; margin: 12px 0; }
@@ -471,6 +547,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             transition: var(--transition) !important;
         }
         .bubble:hover { background: var(--glass-bg) !important; border-color: var(--accent-primary) !important; transform: scale(1.1); }
+        .bubble.active { background: rgba(99, 102, 241, 0.2) !important; border-color: var(--accent-primary) !important; color: var(--accent-primary) !important; }
         #toolsToggle { transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important; }
         #toolsToggle.active { transform: rotate(90deg); }
 
@@ -482,48 +559,66 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             .mobile-text { display: inline; }
             .container { padding: 0; height: 100dvh; }
             .header { 
-                padding: 6px 10px; 
+                padding: 10px; 
                 margin-bottom: 0; 
                 border-radius: 0; 
-                border-left: none; 
-                border-right: none; 
-                border-top: none;
+                border-bottom: 1px solid var(--glass-border);
                 flex-direction: column;
-                gap: 4px;
+                gap: 8px;
+                flex-shrink: 0;
             }
+            body.dropdown-open { overflow: hidden !important; position: fixed; width: 100%; }
             .logo { width: 100%; justify-content: center; }
-            .logo-icon { width: 28px; height: 28px; font-size: 14px; }
-            .logo-text { font-size: 1rem; }
+            .logo-icon { width: 32px; height: 32px; font-size: 16px; }
+            .logo-text { font-size: 1.1rem; }
             
             .header-controls { 
                 width: 100%; 
-                justify-content: center; 
-                gap: 4px;
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                padding-bottom: 2px;
-                -webkit-overflow-scrolling: touch;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 0;
             }
-            .header-controls::-webkit-scrollbar { display: none; }
             
-            .model-btn { padding: 5px 8px; font-size: 0.7rem; white-space: nowrap; }
-            .toggle-btn, .clear-btn { padding: 5px 8px; font-size: 0.7rem; white-space: nowrap; }
+            .voice-selector, .model-selector { flex: 1; min-width: 0; }
+            .model-btn, .voice-btn { width: 100%; justify-content: center; overflow: hidden; text-overflow: ellipsis; }
+            
+            .toggle-btn, .clear-btn { flex: 0 0 auto; }
             
             /* Bottom Sheet style for dropdowns */
             .model-dropdown, .voice-dropdown { 
-                position: fixed; 
-                top: auto; 
-                bottom: 0; 
-                left: 0; 
-                right: 0; 
-                width: 100%; 
-                max-width: none;
-                margin: 0;
-                border-radius: 20px 20px 0 0;
-                max-height: 70vh;
-                animation: slideUp 0.3s ease-out;
+                position: fixed !important; 
+                top: auto !important; 
+                bottom: 0 !important; 
+                left: 0 !important; 
+                right: 0 !important; 
+                width: 100% !important; 
+                max-width: none !important;
+                margin: 0 !important;
+                border-radius: 24px 24px 0 0 !important;
+                max-height: 70vh !important;
+                z-index: 2001 !important;
+                box-shadow: 0 -10px 40px rgba(0,0,0,0.8) !important;
+                animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                pointer-events: all !important;
+                visibility: hidden;
+                opacity: 0;
             }
-            @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+            .model-dropdown.show, .voice-dropdown.show { 
+                visibility: visible !important; 
+                opacity: 1 !important; 
+            }
+            
+            #dropdownOverlay {
+                z-index: 2000 !important;
+                visibility: hidden;
+                opacity: 0;
+            }
+            #dropdownOverlay.show { 
+                visibility: visible !important; 
+                opacity: 1 !important; 
+            }
             
             .chat-container { border-radius: 0; border: none; }
             .messages { padding: 12px; gap: 16px; }
@@ -594,14 +689,12 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                         <span id="currentVoiceName">Male (US)</span>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
                     </button>
-                    <div class="voice-dropdown" id="voiceDropdown"></div>
                 </div>
                 <div class="model-selector">
                     <button class="model-btn" id="modelBtn" type="button">
                         <span id="currentModelName">ChatGPT</span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6,9 12,15 18,9"></polyline></svg>
                     </button>
-                    <div class="model-dropdown" id="modelDropdown"></div>
                 </div>
                 <button class="toggle-btn active" id="reasoningToggle" type="button">
                     <span class="desktop-text">&#128161; Reasoning</span>
@@ -613,7 +706,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                 </button>
             </div>
         </header>
-        <div id="dropdownOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100;"></div>
+        <div id="dropdownOverlay"></div>
         <main class="chat-container">
             <div class="messages" id="messagesContainer">
                 <div class="welcome" id="welcomeScreen">
@@ -635,6 +728,9 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                     </div>
                     <div class="tools-container" id="toolsContainer">
                         <div class="tools-bubbles" id="toolsBubbles">
+                            <button class="media-btn bubble" id="deepResearchBtn" type="button" title="Deep Research">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                            </button>
                             <button class="media-btn bubble" id="speakInputBtn" type="button" title="Speak Text">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                             </button>
@@ -662,6 +758,9 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             </div>
         </main>
     </div>
+
+    <div id="modelDropdown" class="model-dropdown"></div>
+    <div id="voiceDropdown" class="voice-dropdown"></div>
 
     <script>
     (function() {
@@ -742,6 +841,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             currentModelIndex: 0,
             currentVoiceId: 'Magpie-Multilingual.EN-US.Leo.Neutral',
             showReasoning: true,
+            deepResearch: false,
             conversationHistory: [],
             isStreaming: false,
             files: []
@@ -770,6 +870,13 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                        .replace(/</g, '&lt;')
                        .replace(/>/g, '&gt;');
             
+            // 1.1 Restore safe <br> tags
+            text = text.replace(/&lt;br\s*\/?&gt;/gim, '<br>');
+            text = text.replace(/&lt;ul&gt;/gim, '<ul>');
+            text = text.replace(/&lt;\/ul&gt;/gim, '</ul>');
+            text = text.replace(/&lt;li&gt;/gim, '<li>');
+            text = text.replace(/&lt;\/li&gt;/gim, '</li>');
+            
             // 2. Code blocks (extract to prevent collision)
             var codeBlocks = [];
             text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, function(match, lang, code) {
@@ -787,12 +894,12 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             });
 
             // 4. Headers (ordered from longest to shortest to avoid partial matches)
-            text = text.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
-            text = text.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
-            text = text.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
-            text = text.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-            text = text.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-            text = text.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+            text = text.replace(/(^|\s)######\s+(.*$)/gim, '$1<h6>$2</h6>');
+            text = text.replace(/(^|\s)#####\s+(.*$)/gim, '$1<h5>$2</h5>');
+            text = text.replace(/(^|\s)####\s+(.*$)/gim, '$1<h4>$2</h4>');
+            text = text.replace(/(^|\s)###\s+(.*$)/gim, '$1<h3>$2</h3>');
+            text = text.replace(/(^|\s)##\s+(.*$)/gim, '$1<h2>$2</h2>');
+            text = text.replace(/(^|\s)#\s+(.*$)/gim, '$1<h1>$2</h1>');
 
             // 5. Bold, Italic, Bold+Italic
             // ***bolditalic***
@@ -801,6 +908,9 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
             // *italic*
             text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+            // 5.1 Horizontal Rule
+            text = text.replace(/^---$/gm, '<hr>');
 
             // 6. Tables
             var lines = text.split('\n');
@@ -875,7 +985,8 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             // Cleanup
             text = text.replace(/<p><div/g, '<div').replace(/div><\/p>/g, 'div>')
                        .replace(/<p><ul>/g, '<ul>').replace(/<\/ul><\/p>/g, '</ul>')
-                       .replace(/<p><table>/g, '<table>').replace(/<\/table><\/p>/g, '</table>');
+                       .replace(/<p><table>/g, '<table>').replace(/<\/table><\/p>/g, '</table>')
+                       .replace(/<p><hr><\/p>/g, '<hr>');
             
             return text;
         }
@@ -1185,7 +1296,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             }
 
             // File Upload Logic (Gemini/Multimodal)
-            var isMultimodal = model.provider === 'google' || model.id.includes('gemini');
+            var isMultimodal = model.provider === 'google' || model.id.includes('gemini') || model.id.includes('kimi-k2.5') || model.id.includes('mistral');
             elements.attachBtn.style.display = isMultimodal ? 'block' : 'none';
             if (!isMultimodal) {
                 state.files = [];
@@ -1309,6 +1420,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             formData.append('message', message);
             formData.append('model_index', state.currentModelIndex);
             formData.append('show_reasoning', state.showReasoning);
+            formData.append('deep_research', state.deepResearch);
             formData.append('history', JSON.stringify(state.conversationHistory.slice(-20)));
             
             // Send files
@@ -1479,6 +1591,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             elements.imageBtn = document.getElementById('imageBtn');
             elements.videoBtn = document.getElementById('videoBtn');
             elements.speakInputBtn = document.getElementById('speakInputBtn');
+            elements.deepResearchBtn = document.getElementById('deepResearchBtn');
             elements.toolsToggle = document.getElementById('toolsToggle');
             elements.toolsBubbles = document.getElementById('toolsBubbles');
             elements.toolsIcon = document.getElementById('toolsIcon');
@@ -1502,8 +1615,16 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                 elements.closeToolsIcon.style.display = show ? 'block' : 'none';
             };
 
-            // Close tools when clicking bubble
-            var bubbles = elements.toolsBubbles.querySelectorAll('.bubble');
+            // Event: Deep Research Toggle
+            elements.deepResearchBtn.onclick = function(e) {
+                e.stopPropagation();
+                state.deepResearch = !state.deepResearch;
+                this.classList.toggle('active', state.deepResearch);
+                console.log('Deep Research:', state.deepResearch);
+            };
+
+            // Close tools when clicking bubble (except deepResearchBtn)
+            var bubbles = elements.toolsBubbles.querySelectorAll('.bubble:not(#deepResearchBtn)');
             bubbles.forEach(function(b) {
                 b.addEventListener('click', function() {
                     elements.toolsBubbles.classList.remove('show');
@@ -1517,10 +1638,19 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             elements.modelBtn.onclick = function(e) {
                 e.stopPropagation();
                 var show = !elements.modelDropdown.classList.contains('show');
-                elements.modelDropdown.classList.toggle('show', show);
+                
+                // Reset all
+                elements.modelDropdown.classList.remove('show');
                 elements.voiceDropdown.classList.remove('show');
-                if (window.innerWidth <= 768) {
-                    elements.overlay.style.display = show ? 'block' : 'none';
+                elements.overlay.classList.remove('show');
+                document.body.classList.remove('dropdown-open');
+                
+                if (show) {
+                    elements.modelDropdown.classList.add('show');
+                    if (window.innerWidth <= 768) {
+                        elements.overlay.classList.add('show');
+                        document.body.classList.add('dropdown-open');
+                    }
                 }
             };
             
@@ -1528,10 +1658,19 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
             elements.voiceBtn.onclick = function(e) {
                 e.stopPropagation();
                 var show = !elements.voiceDropdown.classList.contains('show');
-                elements.voiceDropdown.classList.toggle('show', show);
+                
+                // Reset all
                 elements.modelDropdown.classList.remove('show');
-                if (window.innerWidth <= 768) {
-                    elements.overlay.style.display = show ? 'block' : 'none';
+                elements.voiceDropdown.classList.remove('show');
+                elements.overlay.classList.remove('show');
+                document.body.classList.remove('dropdown-open');
+                
+                if (show) {
+                    elements.voiceDropdown.classList.add('show');
+                    if (window.innerWidth <= 768) {
+                        elements.overlay.classList.add('show');
+                        document.body.classList.add('dropdown-open');
+                    }
                 }
             };
             
@@ -1543,7 +1682,9 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                 }
                 if (target) {
                     selectModel(parseInt(target.getAttribute('data-index'), 10));
-                    elements.overlay.style.display = 'none';
+                    elements.overlay.classList.remove('show');
+                    elements.modelDropdown.classList.remove('show');
+                    document.body.classList.remove('dropdown-open');
                 }
             };
 
@@ -1555,7 +1696,9 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                 }
                 if (target) {
                     selectVoice(target.getAttribute('data-id'));
-                    elements.overlay.style.display = 'none';
+                    elements.overlay.classList.remove('show');
+                    elements.voiceDropdown.classList.remove('show');
+                    document.body.classList.remove('dropdown-open');
                 }
             };
             
@@ -1573,13 +1716,17 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
                     elements.toolsIcon.style.display = 'block';
                     elements.closeToolsIcon.style.display = 'none';
                 }
-                elements.overlay.style.display = 'none';
+                if (!elements.modelDropdown.classList.contains('show') && !elements.voiceDropdown.classList.contains('show')) {
+                    elements.overlay.classList.remove('show');
+                    document.body.classList.remove('dropdown-open');
+                }
             };
             
             elements.overlay.onclick = function() {
                 elements.modelDropdown.classList.remove('show');
                 elements.voiceDropdown.classList.remove('show');
-                elements.overlay.style.display = 'none';
+                elements.overlay.classList.remove('show');
+                document.body.classList.remove('dropdown-open');
             };
             
             // Event: Reasoning toggle
@@ -1671,6 +1818,7 @@ def chat():
     message = request.form.get('message', '')
     model_index = int(request.form.get('model_index', 0))
     show_reasoning = request.form.get('show_reasoning', 'true') == 'true'
+    deep_research_enabled = request.form.get('deep_research', 'false') == 'true'
     history = json.loads(request.form.get('history', '[]'))
     
     # Read files immediately into memory to avoid closed file errors in stream_with_context
@@ -1685,43 +1833,165 @@ def chat():
 
     def generate():
         try:
-            system_prompt = (
-                "You are a high-performance AI assistant. "
-                "Rules:\n"
-                "1. If you need real-time information or are unsure, you MUST use the search tool.\n"
-                "2. To search, output ONLY: [SEARCH: query]\n"
-                "3. Do NOT explain why you are searching. Do NOT include any other text.\n"
-                "4. Respond in English only."
-            )
+            if deep_research_enabled:
+                system_prompt = (
+                    "You are ZYLO ZENITH in DEEP RESEARCH mode. "
+                    "You have access to advanced web scraping via ScraperAPI.\n"
+                    "Rules:\n"
+                    "1. For any query that requires detailed, factual, or up-to-date information, you MUST use the search tool.\n"
+                    "2. To search, output ONLY: [SEARCH: query]\n"
+                    "3. Do NOT explain your search. Do NOT include any other text or reasoning before the search tag.\n"
+                    "4. If the user provides a URL, it has already been scraped for you; analyze the provided [SCRAPED CONTENT] thoroughly.\n"
+                    "5. Respond in English only."
+                )
+            else:
+                system_prompt = (
+                    "You are a high-performance AI assistant. "
+                    "Rules:\n"
+                    "1. If you need real-time information or are unsure, you MUST use the search tool.\n"
+                    "2. To search, output ONLY: [SEARCH: query]\n"
+                    "3. Do NOT explain why you are searching. Do NOT include any other text.\n"
+                    "4. Respond in English only."
+                )
             
             messages = history
             if not any(m["role"] == "system" for m in messages):
                 messages = [{"role": "system", "content": system_prompt}] + history
 
+            # Direct URL Scraping for Deep Research
+            if deep_research_enabled and message:
+                url_match = re.search(r'https?://[^\s]+', message)
+                if url_match:
+                    target_url = url_match.group(0)
+                    yield "data: " + json.dumps({"type": "content", "content": f"\n\U0001F517 *Deep Research: Scraping content from {target_url}...*\n"}) + "\n\n"
+                    scraped_content = fetch_url_content(target_url)
+                    if scraped_content:
+                        url_info = f"\n\n[SCRAPED CONTENT FROM {target_url}]:\n{scraped_content}\n\n"
+                        # Update BOTH history and the current user message being processed
+                        for msg in messages:
+                            if msg["role"] == "user":
+                                if isinstance(msg["content"], str):
+                                    if target_url in msg["content"]:
+                                        msg["content"] += url_info
+                                elif isinstance(msg["content"], list):
+                                    for part in msg["content"]:
+                                        if part.get("type") == "text" and target_url in part.get("text", ""):
+                                            part["text"] += url_info
+                                            break
+                        time.sleep(1) # Small pause for UI visibility
+
+            # Prepare multimodal messages for NVIDIA if needed
+            nvidia_messages = messages
+            if uploaded_files:
+                nvidia_messages = [m.copy() for m in messages]
+                for i in range(len(nvidia_messages) - 1, -1, -1):
+                    if nvidia_messages[i]["role"] == "user":
+                        text_content = nvidia_messages[i]["content"]
+
+                        # Check if this is a model that expects HTML img tags (Kimi) or other NVIDIA models (use structured format)
+                        is_html_img_model = model_config["id"] in ["moonshotai/kimi-k2.5"]
+
+                        if is_html_img_model:
+                            # Kimi models expect HTML <img> tags in content string
+                            new_content = text_content
+                            for file_info in uploaded_files:
+                                if file_info["mime_type"].startswith("image/"):
+                                    b64_image = base64.b64encode(file_info["data"]).decode('utf-8')
+                                    new_content += f" <img src=\"data:{file_info['mime_type']};base64,{b64_image}\" />"
+                            nvidia_messages[i]["content"] = new_content
+                        else:
+                            # Other NVIDIA models expect structured content array
+                            new_content = [{"type": "text", "text": text_content}]
+                            for file_info in uploaded_files:
+                                if file_info["mime_type"].startswith("image/"):
+                                    b64_image = base64.b64encode(file_info["data"]).decode('utf-8')
+                                    new_content.append({
+                                        "type": "image_url",
+                                        "image_url": {"url": f"data:{file_info['mime_type']};base64,{b64_image}"}
+                                    })
+                            nvidia_messages[i]["content"] = new_content
+                        break
+
             stream = None
             is_fallback = False
             provider_used = model_config["provider"]
 
+            # --- PRIMARY ATTEMPT ---
             if model_config["provider"] == "nvidia":
                 try:
                     kwargs = {
                         "model": model_config["id"],
-                        "messages": messages,
+                        "messages": nvidia_messages,
                         "temperature": model_config.get("temperature", 0.7),
                         "top_p": model_config.get("top_p", 0.95),
                         "max_tokens": model_config.get("max_tokens", 8192),
                         "stream": True,
-                        "timeout": 13
+                        "timeout": 30
                     }
                     if model_config.get("extra_body"):
                         kwargs["extra_body"] = model_config["extra_body"]
-                    
-                    stream = nvidia_client.chat.completions.create(**kwargs)
+
+                    # Special timeout handling for Kimi models
+                    is_kimi_model = model_config["id"] == "moonshotai/kimi-k2.5"
+                    if is_kimi_model:
+                        # Try primary Kimi model with 15s timeout
+                        try:
+                            kwargs["timeout"] = 15
+                            stream = nvidia_client.chat.completions.create(**kwargs)
+                        except Exception as e:
+                            print(f"Kimi primary (moonshotai/kimi-k2.5) failed or timed out: {e}. Switching to fallback Kimi model.")
+                            # Fallback to moonshotai/kimi-k2-instruct-0905 (which doesn't support images)
+                            try:
+                                fallback_kwargs = kwargs.copy()
+                                fallback_kwargs["model"] = "moonshotai/kimi-k2-instruct-0905"
+                                fallback_kwargs["timeout"] = 30  # Use longer timeout for fallback
+
+                                # Remove image data for fallback model (since it doesn't support multimodal)
+                                if isinstance(fallback_kwargs["messages"], list):
+                                    for msg in fallback_kwargs["messages"]:
+                                        if msg["role"] == "user" and isinstance(msg["content"], str):
+                                            # Remove HTML img tags from content string
+                                            msg["content"] = re.sub(r'\s*<img\s+src="data:image/[^>]+>', '', msg["content"])
+                                            msg["content"] = msg["content"].strip()
+
+                                stream = nvidia_client.chat.completions.create(**fallback_kwargs)
+                                print("Successfully switched to fallback Kimi model: moonshotai/kimi-k2-instruct-0905")
+                            except Exception as fallback_e:
+                                print(f"Both Kimi models failed: {fallback_e}. Switching to general fallback.")
+                                stream = None
+                                is_fallback = True
+                    else:
+                        # Regular NVIDIA models
+                        stream = nvidia_client.chat.completions.create(**kwargs)
                 except Exception as e:
-                    print(f"NVIDIA failed or timed out: {e}. Switching to fallback.")
+                    print(f"NVIDIA primary failed: {e}. Switching to fallback.")
                     is_fallback = True
 
-            if is_fallback:
+            elif model_config["provider"] == "google":
+                if not HAS_GEMINI or gemini_client is None:
+                    is_fallback = True
+                else:
+                    try:
+                        chat_history_str = ""
+                        for msg in messages:
+                            if msg["role"] == "system": chat_history_str += "System: " + msg["content"] + "\n"
+                            elif msg["role"] == "user": chat_history_str += "You: " + msg["content"] + "\n"
+                            elif msg["role"] == "assistant": chat_history_str += "Assistant: " + msg["content"] + "\n"
+                        contents = [chat_history_str]
+                        if uploaded_files:
+                            from google.genai import types
+                            for file_info in uploaded_files:
+                                contents.append(types.Part.from_bytes(data=file_info["data"], mime_type=file_info["mime_type"]))
+                        stream = gemini_client.models.generate_content_stream(
+                            model=model_config["id"].replace("google/", ""),
+                            contents=contents
+                        )
+                    except Exception as e:
+                        print(f"Gemini primary failed: {e}. Switching to fallback.")
+                        is_fallback = True
+
+            # --- FALLBACK LOGIC ---
+            if is_fallback or (not stream and model_config["provider"] == "openrouter"):
                 # Special fallback for GLM-4.7 to Cerebras
                 if model_config["id"] == "z-ai/glm4.7" and cerebras_client:
                     try:
@@ -1731,67 +2001,53 @@ def chat():
                             messages=messages,
                             stream=True,
                             temperature=1,
-                            max_tokens=16384
+                            max_tokens=16384,
+                            timeout=30
                         )
                         provider_used = "cerebras"
                     except Exception as ce:
                         print(f"Cerebras fallback failed: {ce}")
-                        is_fallback = True # Continue to OpenRouter if Cerebras fails
                 
                 # General fallback to OpenRouter
                 if stream is None and openrouter_client:
                     print("Falling back to OpenRouter")
-                    stream = openrouter_client.chat.completions.create(
-                        model="tngtech/deepseek-r1t2-chimera:free",
-                        messages=messages,
-                        temperature=0.1,
-                        stream=True
-                    )
-                    provider_used = "openrouter"
+                    try:
+                        stream = openrouter_client.chat.completions.create(
+                            model="tngtech/deepseek-r1t2-chimera:free",
+                            messages=messages,
+                            temperature=0.1,
+                            stream=True,
+                            timeout=30
+                        )
+                        provider_used = "openrouter"
+                    except Exception as e:
+                        print(f"OpenRouter fallback failed: {e}")
 
-            if not stream and model_config["provider"] == "openrouter":
-                if openrouter_client:
-                    stream = openrouter_client.chat.completions.create(
-                        model="tngtech/deepseek-r1t2-chimera:free",
-                        messages=messages,
-                        temperature=0.1,
-                        stream=True
-                    )
-                else:
-                    yield "data: " + json.dumps({"type": "error", "content": "OpenRouter not initialized"}) + "\n\n"
-                    return
-
-            if model_config["provider"] == "google":
-                # ... Gemini logic remains same ...
-                if not HAS_GEMINI or gemini_client is None:
-                    yield "data: " + json.dumps({"type": "error", "content": "Gemini not available"}) + "\n\n"
-                    return
-                chat_history_str = ""
-                for msg in messages:
-                    if msg["role"] == "system": chat_history_str += "System: " + msg["content"] + "\n"
-                    elif msg["role"] == "user": chat_history_str += "You: " + msg["content"] + "\n"
-                    elif msg["role"] == "assistant": chat_history_str += "Assistant: " + msg["content"] + "\n"
-                contents = [chat_history_str]
-                if uploaded_files:
-                    from google.genai import types
-                    for file_info in uploaded_files:
-                        contents.append(types.Part.from_bytes(data=file_info["data"], mime_type=file_info["mime_type"]))
-                stream = gemini_client.models.generate_content_stream(
-                    model=model_config["id"].replace("google/", ""),
-                    contents=contents
-                )
-                for chunk in stream:
-                    content = chunk.text
-                    if content:
-                        yield "data: " + json.dumps({"type": "content", "content": content}) + "\n\n"
-                yield "data: [DONE]\n\n"
+            if not stream:
+                yield "data: " + json.dumps({"type": "error", "content": "All providers failed or timed out. Please try again."}) + "\n\n"
                 return
 
+            # --- STREAMING LOOP ---
             full_response = ""
             search_detected = False
             in_think_block = False
             buffer = ""
+
+            # Handle Gemini differently due to its unique stream object
+            if provider_used == "google":
+                try:
+                    for chunk in stream:
+                        content = chunk.text
+                        if content:
+                            yield "data: " + json.dumps({"type": "content", "content": content}) + "\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+                except Exception as e:
+                    # If it fails during streaming, we can't really fall back easily if we already yielded
+                    yield "data: " + json.dumps({"type": "error", "content": f"Gemini stream error: {e}"}) + "\n\n"
+                    return
             
+            # Standard OpenAI-style streaming for NVIDIA, Cerebras, OpenRouter
             for chunk in stream:
                 if not getattr(chunk, "choices", None) or not chunk.choices:
                     continue
@@ -1837,28 +2093,44 @@ def chat():
                                 match = re.search(r"\[SEARCH:(.*?)\]", full_response)
                                 if match:
                                     query = match.group(1).strip()
-                                    yield "data: " + json.dumps({"type": "content", "content": f"\n\U0001F50D *Searching for: {query}*...\n"}) + "\n\n"
+                                    search_type = "Deep Research" if deep_research_enabled else "Search"
+                                    yield "data: " + json.dumps({"type": "content", "content": f"\n\U0001F50D *{search_type}ing for: {query}*...\n"}) + "\n\n"
                                     
-                                    search_results = web_search(query)
+                                    if deep_research_enabled:
+                                        search_results = deep_search(query)
+                                    else:
+                                        search_results = web_search(query)
                                     
-                                    messages.append({"role": "assistant", "content": f"[SEARCH: {query}]"})
+                                    messages.append({"role": "assistant", "content": f"[{search_type.upper()}: {query}]"})
                                     messages.append({"role": "user", "content": f"Search Results:\n{search_results}\n\nPlease synthesize the final answer."})
                                     
                                     if provider_used == "cerebras" and cerebras_client:
                                         second_stream = cerebras_client.chat.completions.create(
                                             model="zai-glm-4.7",
                                             messages=messages,
-                                            stream=True
+                                            stream=True,
+                                            timeout=13
+                                        )
+                                    elif provider_used == "nvidia" and nvidia_client:
+                                        second_stream = nvidia_client.chat.completions.create(
+                                            model=model_config["id"],
+                                            messages=messages,
+                                            stream=True,
+                                            temperature=0.3,
+                                            timeout=13
                                         )
                                     elif openrouter_client:
                                         second_stream = openrouter_client.chat.completions.create(
                                             model="tngtech/deepseek-r1t2-chimera:free",
                                             messages=messages,
-                                            stream=True
+                                            stream=True,
+                                            timeout=13
                                         )
                                     
                                     if second_stream:
                                         for s_chunk in second_stream:
+                                            if not getattr(s_chunk, "choices", None) or not s_chunk.choices:
+                                                continue
                                             s_delta = s_chunk.choices[0].delta
                                             s_reasoning = getattr(s_delta, "reasoning_content", None)
                                             if s_reasoning:
@@ -1882,8 +2154,6 @@ def chat():
                                     buffer = ""
 
             yield "data: [DONE]\n\n"
-        except Exception as e:
-            yield "data: " + json.dumps({"type": "error", "content": str(e)}) + "\n\n"
         except Exception as e:
             yield "data: " + json.dumps({"type": "error", "content": str(e)}) + "\n\n"
 
@@ -1932,8 +2202,9 @@ def generate_media():
                 time.sleep(5)
                 status_res = zhipu_client.videos.retrieve_videos_result(id=task_id)
                 if status_res.task_status == "SUCCESS":
-                    if status_res.video_result:
+                    if status_res.video_result and len(status_res.video_result) > 0:
                         return jsonify({"url": status_res.video_result[0].url, "type": "video"})
+                    return jsonify({"error": "Video success but no result data"})
                 if status_res.task_status == "FAIL":
                     return jsonify({"error": "Video generation failed"})
             
@@ -2015,3 +2286,4 @@ if __name__ == "__main__":
     app = Flask(__name__)
     app.register_blueprint(zenith_bp)
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+
