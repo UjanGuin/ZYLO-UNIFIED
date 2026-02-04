@@ -63,7 +63,7 @@ ZYLO UNIFIED brings together the following research projects:
 * **ZYLO ZENITH** — Unified Multi-Model Intelligence & Media Engine
 * **ZYLO LINK** — Secure real‑time communication with AI integration
 * **ZYLO RiG0R** — Formal mathematics and physics verification engine
-* **ZYLO CLOUD** — Private, self‑hosted cloud storage and filesystem
+* **ZYLO CLOUD** — Private, self‑hosted cloud storage and filesystem with user-specific quotas and integrated user accounts. Now features a "Premium storage vault" description on the landing page.
 * **ZYLO VEIL** — Experimental cryptographic steganography and destructive security
 
 Each module is independently powerful; ZYLO UNIFIED makes them **operate as one system**.
@@ -139,11 +139,11 @@ A real-time, persistent communication layer.
 
 
 ### 2. ZYLO CLOUD (`Cloud_Storage.py`)
-A self-hosted, private file vault.
-*   **Storage**: Direct interface to local encrypted partitions or external media (SD cards/USBs).
-*   **Management**: Full file system operations (Upload, Download, Preview, Delete, Mkdir).
-*   **Access Control**: Simple passphrase-based locking mechanism.
-*   **Performance**: Streaming uploads/downloads, efficient directory listing.
+A self-hosted, private file vault with user-specific storage quotas.
+*   **Storage**: Direct interface to local encrypted partitions or external media (SD cards/USBs). Each user gets a private vault with a default 1GB quota.
+*   **Management**: Full file system operations (Upload, Download, Preview, Delete, Mkdir). Supports progress bars for uploads and clear error messages for quota exceeded.
+*   **Access Control**: Secure "Vault Unlock" mechanism requiring ZYLO Username and an Access Key, linking directly to user accounts.
+*   **Performance**: Streaming uploads/downloads, efficient directory listing. Integrated UI warnings for full storage.
 
 <p align="center">
   <img src="assets/ui4.jpeg" width="43%"/>
@@ -301,7 +301,7 @@ Once running, navigate to the landing page. You will see three main cards and a 
 
 1.  **ZYLO AI**: Opens the modal to access **RiG0R** (Research Engine) or **ZENITH** (Unified AI).
 2.  **ZYLO LINK**: Opens the secure chat application.
-3.  **ZYLO CLOUD**: Opens the file storage vault.
+3.  **ZYLO CLOUD**: Opens the file storage vault. (Premium storage vault)
 4.  **ZYLO VEIL**: Accessed via a **secret gesture** on the landing page (click/drag on the subtitle "Unified Digital Intelligence" more than 100px) or directly at `/veil`.
 
 ---
