@@ -1,3 +1,4 @@
+#ngrok http --url=indirectly-credible-egret.ngrok-free.app 5000
 import eventlet
 eventlet.monkey_patch()
 
@@ -28,6 +29,9 @@ root_logger.addHandler(file_handler)
 
 app = Flask(__name__)
 app.logger.addHandler(file_handler)
+app.config['SECRET_KEY'] = os.environ.get("ZYLO_SECRET_KEY", "zylo_master_key_2026")
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 4096 * 1024 * 1024  # 4GB max
 
 def redact_sensitive(data):
     """Redact passwords and keys from logs."""
@@ -71,8 +75,13 @@ def log_response_info(response):
         content_preview = ""
         if response.direct_passthrough:
             content_preview = "[STREAMING/FILE]"
+        elif response.mimetype in ['application/json', 'text/html', 'text/plain', 'text/event-stream']:
+            try:
+                content_preview = response.get_data(as_text=True)[:500]
+            except Exception:
+                content_preview = "[BINARY/NON-UTF8 DATA]"
         else:
-            content_preview = response.get_data(as_text=True)[:500]
+            content_preview = f"[BINARY: {response.mimetype}]"
             
         app.logger.info(
             f"RESPONSE | User: {user_id} | Status: {response.status} | "
@@ -84,6 +93,9 @@ def log_response_info(response):
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
     # Log the full stack trace for any unhandled exception
     app.logger.error(f"UNHANDLED EXCEPTION | URL: {request.url} | Error: {str(e)}", exc_info=True)
     # Re-raise or return 500
@@ -95,15 +107,7 @@ from Cloud_Storage import cloud_bp
 from ZYlO_RiG0R import rigor_bp
 from chat import chat_bp, socketio
 from ZYLOVEIL import veil_bp
-import os
-import sys
-import json
-import re
-import subprocess
-import time
-from typing import List, Dict, Optional, Any
-from io import BytesIO
-from pathlib import Path
+import weather as zylo_feels
 
 try:
     from gtts import gTTS
@@ -123,11 +127,6 @@ try:
 except ImportError:
     HAS_ZHIPU = False
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get("ZYLO_SECRET_KEY", "zylo_master_key_2026")
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 4096 * 1024 * 1024  # 4GB max
-
 # Register Blueprints
 app.register_blueprint(cloud_bp)
 app.register_blueprint(rigor_bp)
@@ -135,8 +134,6 @@ app.register_blueprint(chat_bp)
 app.register_blueprint(veil_bp, url_prefix='/veil')
 
 # Import and register ZYLO ZENITH blueprint
-import sys
-import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import importlib.util
 spec = importlib.util.spec_from_file_location("AI_Zenith", os.path.join(os.path.dirname(os.path.abspath(__file__)), "AI~Zenith.py"))
@@ -175,26 +172,27 @@ LANDING_PAGE = """
             background-image: 
                 radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
                 radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
-            height: 100vh;
+            min-height: 100vh;
+            min-height: 100dvh;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
             color: var(--text-main);
         }
 
         .container {
             width: 100%;
             max-width: 1000px;
-            padding: 20px;
+            padding: 40px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 40px;
+            gap: 14px;
             z-index: 1;
-            height: 100%;
-            justify-content: center;
-            overflow-y: auto; /* Allow scrolling on small screens if needed */
+            margin: auto;
+            position: relative;
         }
 
         .header {
@@ -230,6 +228,7 @@ LANDING_PAGE = """
             flex-wrap: wrap;
             perspective: 1000px;
             flex-shrink: 0;
+            margin-top: 6px;
         }
 
         .card-wrapper {
@@ -244,6 +243,7 @@ LANDING_PAGE = """
         .card-wrapper:nth-child(1) { animation-delay: 0.1s; }
         .card-wrapper:nth-child(2) { animation-delay: 0.2s; }
         .card-wrapper:nth-child(3) { animation-delay: 0.3s; }
+        .card-wrapper:nth-child(4) { animation-delay: 0.4s; }
 
         .card-wrapper:hover {
             transform: translateY(-10px);
@@ -323,6 +323,53 @@ LANDING_PAGE = """
             padding: 0 20px;
         }
 
+        .wide-card {
+            width: auto;
+            max-width: none;
+            margin: 0;
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            height: auto;
+            z-index: 5;
+        }
+        .wide-card .glass-card {
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            gap: 0;
+            text-align: left;
+            height: auto;
+            min-height: 0;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+        }
+        .feels-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .feels-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 0.85rem;
+            line-height: 1;
+        }
+        .feels-pill img {
+            width: 20px;
+            height: 20px;
+        }
+
         @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -348,16 +395,18 @@ LANDING_PAGE = """
         
         /* --- Mobile Adaptations --- */
         @media (max-width: 768px) {
+            body { align-items: flex-start; }
             .logo { font-size: 2.5rem; }
             .subtitle { font-size: 0.9rem; }
-            .container { padding: 20px 10px; gap: 20px; height: auto; display: block; overflow-y: auto; }
-            .header { margin-top: 40px; margin-bottom: 30px; }
-            .cards { padding-bottom: 40px; }
-            .card-wrapper { width: 100%; max-width: 320px; height: 180px; margin: 0 auto 20px auto; }
+            .container { padding: 28px 12px; gap: 12px; margin-top: 8px; }
+            .header { margin-bottom: 10px; }
+            .cards { gap: 12px; }
+            .card-wrapper { width: 100%; max-width: 320px; height: 160px; margin: 0 auto; }
             .glass-card { flex-direction: row; padding: 0 20px; justify-content: flex-start; gap: 20px; text-align: left; }
             .icon-box { margin-bottom: 0; font-size: 2.5rem; }
             .card-title { font-size: 1.2rem; margin-bottom: 4px; }
             .card-desc { text-align: left; padding: 0; font-size: 0.8rem; }
+            .wide-card { position: static; width: auto; align-self: flex-end; }
         }
 
         /* --- Modal Styles --- */
@@ -456,6 +505,14 @@ LANDING_PAGE = """
             <div class="subtitle" id="secret-trigger" style="cursor: default; user-select: none;">Unified Digital Intelligence</div>
         </div>
 
+        <!-- ZYLO FEELS Wide Card -->
+        <a href="/feels" class="card-wrapper wide-card">
+            <div class="feels-pill">
+                <img id="feels-icon" src="" alt="">
+                <span id="feels-temp">--°</span>
+            </div>
+        </a>
+
         <div class="cards">
             
             <!-- AI Card -->
@@ -486,7 +543,7 @@ LANDING_PAGE = """
                     <div class="icon-box"><i class="fas fa-cloud"></i></div>
                     <div>
                         <div class="card-title">ZYLO CLOUD</div>
-                        <div class="card-desc">Premium infinite storage vault</div>
+                        <div class="card-desc">Premium storage vault</div>
                     </div>
                 </a>
             </div>
@@ -580,6 +637,23 @@ LANDING_PAGE = """
             trigger.addEventListener('touchmove', handleMove);
             trigger.addEventListener('touchend', handleEnd);
         })();
+
+        // ZYLO FEELS preview (temp + icon)
+        (function() {
+            const tempEl = document.getElementById('feels-temp');
+            const iconEl = document.getElementById('feels-icon');
+            if (!tempEl || !iconEl) return;
+            fetch('/api/weather')
+                .then(r => r.json())
+                .then(d => {
+                    if (!d || d.error) return;
+                    const temp = d?.TopMetrics?.Temperature;
+                    const icon = d?.Location?.Condition?.icon;
+                    if (temp !== null && temp !== undefined) tempEl.textContent = `${temp}°`;
+                    if (icon) iconEl.src = icon;
+                })
+                .catch(() => {});
+        })();
     </script>
 </body>
 </html>
@@ -588,6 +662,41 @@ LANDING_PAGE = """
 @app.route('/')
 def home():
     return render_template_string(LANDING_PAGE)
+
+@app.route('/feels')
+def feels():
+    return render_template_string(zylo_feels.HTML, refresh=zylo_feels.REFRESH_SECONDS)
+
+@app.route('/api/weather')
+def feels_api_weather():
+    try:
+        query = request.args.get("q") or None
+        return jsonify(zylo_feels.fetch_weather(query=query))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/speak", methods=["POST"])
+def feels_api_speak():
+    return zylo_feels.api_speak()
+
+@app.route('/api/music', methods=['POST'])
+def feels_api_music():
+    try:
+        payload = request.get_json(silent=True) or {}
+        data = payload.get("weather") or zylo_feels.fetch_weather()
+        return jsonify(zylo_feels.start_music_job(data))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/music/status')
+def feels_api_music_status():
+    try:
+        job_key = (request.args.get("job_key") or "").strip()
+        if not job_key:
+            return jsonify({"error": "Missing job_key."}), 400
+        return jsonify(zylo_feels.get_music_job_status(job_key))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     print("💎 ZYLO UNIFIED SERVER STARTED | PORT 5000")
