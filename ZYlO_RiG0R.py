@@ -7,6 +7,9 @@ import json
 import time
 import math
 import shlex
+import base64
+import io
+import sys
 import uuid
 import signal
 import atexit
@@ -16,7 +19,134 @@ import traceback
 import subprocess
 from typing import Optional, Tuple, Dict, Any
 
-from flask import Flask, request, jsonify, Response, send_from_directory, Blueprint
+try:
+    from IPython.core.interactiveshell import InteractiveShell
+    from IPython.display import display
+except ImportError:
+    InteractiveShell = None
+
+from flask import Flask, request, jsonify, Response, send_from_directory, Blueprint, stream_with_context
+
+# ... (API Keys and Config)
+# -------------------------
+# IPython Execution Engine
+# -------------------------
+GLOBAL_EXECUTORS = {}
+
+class IPythonExecutor:
+    def __init__(self):
+        if InteractiveShell is None:
+            self.shell = None
+            logger.error("IPython not installed. Incremental execution disabled.")
+        else:
+            # Create a dedicated shell instance for this executor
+            self.shell = InteractiveShell()
+            # Disable automatic display of the last expression
+            self.shell.ast_node_interactivity = "last_expr"
+            
+        self.execution_history = []
+        self.namespace = self.shell.user_ns if self.shell else {}
+        
+        # Pre-import common research tools
+        if self.shell:
+            pre_imports = [
+                "import math, sys, json, os",
+                "import numpy as np",
+                "import sympy as sp",
+                "from sympy import symbols, simplify, Eq, solve, diff, integrate, limit, expand, factor",
+                "from sympy.abc import x, y, z, a, b, c, n",
+                "import matplotlib.pyplot as plt",
+                "plt.switch_backend('agg')",
+                "def is_squarefree(n): return all(v == 1 for v in sp.factorint(n).values())",
+                "import sympy; sympy.is_squarefree = is_squarefree; sys.modules['sympy'].is_squarefree = is_squarefree; sp.is_squarefree = is_squarefree"
+            ]
+            for cmd in pre_imports:
+                self.shell.run_cell(cmd)
+        
+    def execute(self, code: str, mode: str = "exec", timeout: int = 30):
+        if not self.shell:
+            return {"stdout": "", "stderr": "IPython not available", "success": False, "figures": []}
+
+        # Capture output
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = stdout_capture, stderr_capture
+        
+        try:
+            if mode == "eval":
+                result_val = self.shell.ev(code)
+                output = repr(result_val)
+                success = True
+                error = ""
+            else:
+                # run_cell returns an ExecutionResult
+                result = self.shell.run_cell(code)
+                output = stdout_capture.getvalue()
+                error = stderr_capture.getvalue()
+                
+                # Capture the result value (the Out[...] part) if it exists
+                if hasattr(result, 'result') and result.result is not None:
+                    if output: output += "\n"
+                    output += f"Out: {repr(result.result)}"
+                
+                success = result.success if hasattr(result, 'success') else True
+                if not success and hasattr(result, 'error_in_exec') and result.error_in_exec:
+                    error += f"\n{result.error_in_exec}"
+                if not success and hasattr(result, 'error_before_exec') and result.error_before_exec:
+                    error += f"\n{result.error_before_exec}"
+            
+            # Capture figures
+            figures = []
+            try:
+                # Check if there are active figures
+                if "plt" in self.namespace:
+                    plt = self.namespace["plt"]
+                    for i in plt.get_fignums():
+                        fig = plt.figure(i)
+                        buf = io.BytesIO()
+                        fig.savefig(buf, format='png')
+                        buf.seek(0)
+                        img_str = base64.b64encode(buf.read()).decode('utf-8')
+                        figures.append(img_str)
+                        plt.close(fig)
+            except Exception as fe:
+                logger.error(f"Figure capture error: {fe}")
+
+            res_dict = {
+                "stdout": output,
+                "stderr": error,
+                "success": success,
+                "figures": figures
+            }
+            
+            # Store in history
+            self.execution_history.append({
+                "code": code,
+                "output": output,
+                "error": error,
+                "success": success,
+                "figures": figures
+            })
+            
+            return res_dict
+            
+        except Exception as e:
+            return {"stdout": stdout_capture.getvalue(), "stderr": str(e), "success": False, "figures": []}
+        finally:
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+            
+    def get_namespace_snapshot(self):
+        # Return current variables (excluding builtins and common imports)
+        excluded = ['In', 'Out', 'get_ipython', 'exit', 'quit', 'np', 'plt', 'symbols', 'math', 'sys', 'json', 'os']
+        return {k: str(v) for k, v in self.namespace.items() 
+                if not k.startswith('_') and k not in excluded}
+
+def get_executor(session_id: str) -> IPythonExecutor:
+    if session_id not in GLOBAL_EXECUTORS:
+        GLOBAL_EXECUTORS[session_id] = IPythonExecutor()
+    return GLOBAL_EXECUTORS[session_id]
 
 # Replace Cerebras import with a safe import guard
 try:
@@ -27,13 +157,16 @@ except Exception:
 # -------------------------
 # Configuration (env-first)
 # -------------------------
-API_KEY = "csk-k6hvttdked4wfpfyrrf4p8n32m43dd3emer5vcw5895pvmh8"
+CEREBRAS_KEYS = [
+    os.getenv("CEREBRAS_API_KEY", "paste_your_api_key_here"),
+    "paste_your_api_key_here"
+]
 MODEL_NAME = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
-# New OpenRouter Config for Expert Mode
-OPENROUTER_API_KEY = "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"
-EXPERT_MODEL = "tngtech/deepseek-r1t2-chimera:free" # User requested r1t2
+# NVIDIA Expert Mode Config
+NVIDIA_API_KEY = "paste_your_api_key_here"
+EXPERT_MODEL = "z-ai/glm5"
 
-GLM_API_KEY = "642a5c77f75141ceb178ed3106bf8a83.ETf0547Pst0azRUL"
+GLM_API_KEY = os.getenv("ZHIPU_API_KEY", "paste_your_api_key_here")
 GLM_MODEL = "glm-4.7"
 PORT = int(os.getenv("PORT", "5005"))
 DATA_DIR = os.getenv("OSS_SERVER_DATA", "./oss_server_data")
@@ -41,7 +174,7 @@ SESSION_DIR = os.path.join(DATA_DIR, "sessions")
 LOGFILE = os.path.join(DATA_DIR, "server.log")
 
 glm_client = ZhipuAI(api_key=GLM_API_KEY)
-or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+expert_client = OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=NVIDIA_API_KEY)
 
 # Research-Grade Phase Temperatures
 # ---------------------------------
@@ -60,7 +193,7 @@ CONFIDENCE_BY_VERDICT = {
     "incorrect": 0.25    # Explicit mathematical error
 }
 
-if not API_KEY:
+if not any(CEREBRAS_KEYS):
     raise RuntimeError("Set CEREBRAS_API_KEY in environment before running this server.")
 
 # Ensure directories exist
@@ -81,11 +214,11 @@ logging.basicConfig(
 logger = logging.getLogger("oss_server")
 
 # -------------------------
-# Create Cerebras client
+# Create Cerebras clients
 # -------------------------
 if Cerebras is None:
     raise RuntimeError("Cerebras SDK not available. pip install cerebras_cloud_sdk")
-client = Cerebras(api_key=API_KEY)
+cerebras_clients = [Cerebras(api_key=k) for k in CEREBRAS_KEYS]
 
 # -------------------------
 # Flask Blueprint
@@ -99,6 +232,13 @@ rigor_bp = Blueprint('rigor', __name__, url_prefix='/rigor', static_folder='stat
 
 SYSTEM_PROMPT = r"""
 You are GPT-OSS-120B, a Ph.D.-level research assistant in mathematics and physics.
+You are a computational research assistant. When solving problems:
+
+1. NEVER generate all code upfront.
+2. ALWAYS execute code immediately after writing it.
+3. USE the execution output to inform your next step.
+4. CONTINUE iterating until the problem is fully solved.
+5. Each code block should be small (5-15 lines) and focused.
 
 ====================
 MODES OF OPERATION
@@ -109,7 +249,7 @@ You operate in TWO mutually exclusive modes.
 --------------------------------
 MODE A — TOOL MODE (MANDATORY)
 --------------------------------
-Trigger TOOL MODE PREFERENTIALLY (not mandatorily) when verified computation is required:
+Trigger TOOL MODE PREFERENTIALLY when verified computation is required:
 - numerical computation
 - algebraic manipulation
 - calculus evaluation
@@ -118,26 +258,25 @@ Trigger TOOL MODE PREFERENTIALLY (not mandatorily) when verified computation is 
 - data verification
 
 In TOOL MODE:
-1. DO NOT explain anything in natural language.
-2. DO NOT use Markdown.
-3. DO NOT include LaTeX.
-4. Respond with PURE JSON ONLY, starting at the first character.
+1. You MAY provide a brief explanation of your plan in natural language before the JSON block.
+2. Use a SINGLE JSON block for the tool call.
+3. Variables PERSIST. Use previously defined variables.
+4. Write SMALL blocks (5-15 lines).
+5. Execute IMMEDIATELY after writing.
 
-The ONLY valid response format is:
+The valid tool response format is:
 
 {
-  "tool": "python",
-  "code": "<complete executable python code>",
-  "verify": "sympy" | "numeric" | "none",
-  "explain_after": true
+  "tool": "ipython",
+  "code": "print(1+1)",
+  "mode": "exec",
+  "continue": true
 }
 
-Rules for TOOL MODE:
-- The JSON must be valid and standalone.
-- The code must run without placeholders.
-- If verify = "sympy", the code MUST print a JSON object with keys:
-  - "status"
-  - "result"
+Rules:
+- "mode": "exec" (default) runs code. "eval" evaluates expression. "display" for plots.
+- "continue": set to true if you need more steps. False if this is the final calculation.
+- Execute IMMEDIATELY after writing.
 
 --------------------------------
 MODE B — DIRECT ANSWER MODE
@@ -172,15 +311,18 @@ Violating these rules is a critical failure.
 """.strip()
 
 # -------------------------
-# System Prompt: Expert (DeepSeek R1)
+# System Prompt: Expert (NVIDIA GLM-5)
 # -------------------------
 SYSTEM_PROMPT_EXPERT = r"""
-You are DeepSeek R1, an advanced reasoning engine specializing in complex mathematics, physics, and code generation.
+You are GLM-5, an advanced reasoning engine developed by Z-AI and served via NVIDIA. You are a Ph.D.-level expert in mathematics, physics, and computer science.
 
 Your goal is to provide the "Expert" solution:
-1.  **Deep Reasoning:** Use your internal Chain of Thought (CoT) to explore the problem depth.
-2.  **Tool Usage:** If the problem requires calculation, simulation, or verification, you MUST write and execute Python code.
-3.  **Output Format:** 
+1.  **Deep Reasoning:** Use your internal reasoning process to explore the problem depth.
+2.  **Tool Usage:** If the problem requires calculation, simulation, or verification, you MUST write and execute Python code incrementally.
+3.  **Iterative Execution:** 
+    - NEVER generate all code upfront.
+    - Write a small code block, execute it, see the result, then decide next.
+4.  **Output Format:** 
     - You can freely mix natural language and code blocks.
     - If you need to run code, output a SINGLE JSON block for the tool at any point (usually at the start or after some reasoning).
     - If no tool is needed, provide a rigorous, proof-level derivation.
@@ -188,9 +330,10 @@ Your goal is to provide the "Expert" solution:
 TOOL FORMAT:
 ```json
 {
-  "tool": "python",
+  "tool": "ipython",
   "code": "print('Hello World')",
-  "verify": "none"
+  "mode": "exec",
+  "continue": true
 }
 ```
 
@@ -266,12 +409,20 @@ Respond STRICTLY in JSON:
     )
 
     try:
-        return json.loads(resp.choices[0].message.content)
-    except Exception:
+        content = resp.choices[0].message.content.strip()
+        # Handle markdown JSON blocks if present
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].strip()
+        
+        return json.loads(content)
+    except Exception as e:
+        logger.error(f"Recheck Parse Error: {e} | Content: {resp.choices[0].message.content}")
         return {
             "verdict": "uncertain",
             "error_step": "unknown",
-            "reason": "GLM response not parseable",
+            "reason": f"GLM response not parseable: {str(e)}",
             "fix": "unknown"
         }
 
@@ -484,41 +635,108 @@ def call_model_with_history(
 ) -> str:
     """
     Executes the API call with strict phase-aware temperature and reasoning control.
+    Retries with backup keys on failure.
     """
     if len(history) > 80:
         history = [history[0]] + history[-60:]
     
-    logger.info(f"API Call | Reasoning: {reasoning_level} | Temp: {temperature}")
+    last_error = None
+    for i, client in enumerate(cerebras_clients):
+        try:
+            logger.info(f"API Call (Key {i+1}) | Reasoning: {reasoning_level} | Temp: {temperature}")
+            resp = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=history,
+                max_tokens=4096,
+                temperature=temperature,
+                reasoning_effort=reasoning_level
+            )
+            return resp.choices[0].message.content
+        except Exception as e:
+            last_error = e
+            logger.error(f"Cerebras API Error (Key {i+1}): {e}")
+            if i < len(cerebras_clients) - 1:
+                logger.info("Retrying with backup key...")
+            continue
+    
+    raise last_error
 
-    resp = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=history,
-        max_tokens=4096,
-        temperature=temperature,
-        reasoning_effort=reasoning_level
-    )
-    return resp.choices[0].message.content
-
-def call_expert_model(history: list, temperature: float = 0.6) -> str:
+def call_model_stream(
+    history: list, 
+    reasoning_level: str = "high", 
+    temperature: float = 0.5
+):
     """
-    Calls the Expert Model (DeepSeek R1 via OpenRouter).
+    Executes the API call with streaming.
+    Retries with backup keys on failure.
+    """
+    if len(history) > 80:
+        history = [history[0]] + history[-60:]
+    
+    last_error = None
+    for i, client in enumerate(cerebras_clients):
+        try:
+            logger.info(f"API Stream (Key {i+1}) | Reasoning: {reasoning_level} | Temp: {temperature}")
+            return client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=history,
+                max_tokens=4096,
+                temperature=temperature,
+                reasoning_effort=reasoning_level,
+                stream=True
+            )
+        except Exception as e:
+            last_error = e
+            logger.error(f"Cerebras API Stream Error (Key {i+1}): {e}")
+            if i < len(cerebras_clients) - 1:
+                logger.info("Retrying with backup key...")
+            continue
+            
+    raise last_error
+
+def call_expert_model(history: list, temperature: float = 1.0) -> str:
+    """
+    Calls the Expert Model (NVIDIA GLM5).
     """
     if len(history) > 80:
         history = [history[0]] + history[-60:]
 
     logger.info(f"EXPERT API Call | Model: {EXPERT_MODEL} | Temp: {temperature}")
     
-    # R1 works best with temperature around 0.6
-    resp = or_client.chat.completions.create(
+    resp = expert_client.chat.completions.create(
         model=EXPERT_MODEL,
         messages=history,
-        max_tokens=8192,
+        max_tokens=16384,
         temperature=temperature,
+        top_p=1,
         extra_body={
-            "transforms": ["middle-out"]
-        }
+            "chat_template_kwargs": {"enable_thinking": True, "clear_thinking": True}
+        },
+        timeout=120
     )
     return resp.choices[0].message.content
+
+def call_expert_model_stream(history: list, temp: float = 1.0):
+    """
+    Calls the Expert Model with streaming.
+    """
+    if len(history) > 80:
+        history = [history[0]] + history[-60:]
+
+    logger.info(f"EXPERT API Stream | Model: {EXPERT_MODEL} | Temp: {temp}")
+    
+    return expert_client.chat.completions.create(
+        model=EXPERT_MODEL,
+        messages=history,
+        max_tokens=16384,
+        temperature=temp,
+        top_p=1,
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": True, "clear_thinking": True}
+        },
+        stream=True,
+        timeout=120
+    )
 
 # -------------------------
 # Tool Parsing
@@ -548,6 +766,45 @@ def parse_tool_instruction(text: str):
     return None
 
 
+def extract_ipython_instruction(text: str):
+    if not isinstance(text, str):
+        return None
+
+    text = text.strip()
+
+    # 1. Try to find Markdown JSON block first
+    match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if match:
+        try:
+            obj = json.loads(match.group(1))
+            if obj.get("tool") == "ipython":
+                return obj
+        except:
+            pass
+
+    # 2. Try to find any JSON object that looks like a tool call
+    start_indices = [m.start() for m in re.finditer(r'\{', text)]
+    for start in start_indices:
+        balance = 0
+        for i in range(start, len(text)):
+            char = text[i]
+            if char == '{':
+                balance += 1
+            elif char == '}':
+                balance -= 1
+            if balance == 0:
+                candidate = text[start:i+1]
+                if '"tool"' in candidate and '"ipython"' in candidate: 
+                    try:
+                        obj = json.loads(candidate)
+                        if obj.get("tool") == "ipython":
+                            return obj
+                    except:
+                        pass
+                break
+                
+    return None
+
 # -------------------------
 # Session Manager
 # -------------------------
@@ -558,6 +815,9 @@ class ResearchSession:
         self.history = self._data.get("messages", [])
         if not self.history or self.history[0].get("role") != "system":
             self.history.insert(0, {"role":"system","content":SYSTEM_PROMPT})
+        
+        # Attach executor
+        self.executor = get_executor(self.id)
 
     def append_user(self, text: str):
         self.history.append({"role":"user","content":text})
@@ -611,9 +871,8 @@ def strip_tool_json(text: str) -> str:
 
 def requires_tool(text: str) -> bool:
     """
-    Aggressive heuristic detector for problems that REQUIRE
+    Refined heuristic detector for problems that REQUIRE
     verified computation or numerical confirmation.
-    Designed to favor tool usage in research mode.
     """
 
     if not isinstance(text, str):
@@ -626,44 +885,33 @@ def requires_tool(text: str) -> bool:
     # -------------------------------------------------
     numeric_keywords = [
         "compute", "calculate", "evaluate", "find value",
-        "numerically", "approximate", "decimal",
+        "numerically", "approximate",
         "verify", "verification", "check numerically",
         "solve", "solution", "roots", "zeroes",
         "determinant", "det", "eigenvalue", "eigenvalues",
         "matrix", "polynomial", "characteristic",
         "integral", "differentiate", "derivative",
-        "limit", "series", "summation", "product",
-        "probability", "expectation", "variance",
-        "time taken", "fall time", "oscillation",
-        "density", "field", "potential",
-        "energy", "momentum", "force",
-        "trajectory", "motion", "dynamics",
-        "frequency", "angular frequency",
+        "summation", "probability", "expectation", "variance",
+        "trajectory", "dynamics",
         "wavefunction", "schrodinger",
-        "laplace", "fourier", "z-transform",
         "numerical method", "newton method",
         "iteration", "convergence",
-        "simplify", "expand", "factor", "rank", "inverse",
-        "nullspace", "trace", "modulo", "gcd", "lcm",
-        "prime", "factorial", "permutation", "combination",
-        "coefficient", "mean", "median", "mode", "standard deviation",
-        "correlation", "regression", "least squares",
+        "nullspace", "least squares",
         "extrema", "maxima", "minima", "optimization",
         "jacobian", "hessian", "gradient", "divergence", "curl",
         "laplacian", "taylor", "maclaurin", "fourier series",
-        "boltzmann", "planck", "wavelength", "refraction"
+        "hyperbola", "ellipse", "parabola", "tangent", "foci", "directrix"
     ]
 
     if any(k in t for k in numeric_keywords):
         return True
 
     # -------------------------------------------------
-    # 2. SYMBOLIC / STRUCTURAL SIGNALS
+    # 2. SYMBOLIC / STRUCTURAL SIGNALS (More specific)
     # -------------------------------------------------
     symbolic_signals = [
-        "=", "^", "*", "/", "+", "-", 
-        "[[", "]]", "(", ")", "{", "}",
-        "dx", "dt", "∫", "∑", "∏"
+        "==", "**", "[[", "]]", "dx", "dt", "∫", "∑", "∏", 
+        "\\lim", "\\sqrt", "\\int", "\\sum"
     ]
 
     if any(s in t for s in symbolic_signals):
@@ -679,9 +927,9 @@ def requires_tool(text: str) -> bool:
         return True
 
     # -------------------------------------------------
-    # 4. LARGE NUMERIC DATA
+    # 4. LARGE NUMERIC DATA / MATH EXPRESSIONS
     # -------------------------------------------------
-    if re.search(r"\d{4,}", t):  # large integers
+    if re.search(r"\d+\s*[+\-*/=]\s*\d+", t): # basic arithmetic 1+1
         return True
 
     if re.search(r"\b\d+\.\d+\b", t):  # decimals
@@ -689,50 +937,6 @@ def requires_tool(text: str) -> bool:
 
     return False
 
-
-def extract_strict_json(text: str):
-    if not isinstance(text, str):
-        return None
-
-    text = text.strip()
-
-    # 1. Try to find Markdown JSON block first (most reliable if present)
-    match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except:
-            pass
-
-    # 2. Try to find any JSON object that looks like a tool call
-    # We scan for the first '{' and try to find a balanced closing '}'
-    # that results in a valid JSON object containing "tool": "python"
-    
-    start_indices = [m.start() for m in re.finditer(r'\{', text)]
-    
-    for start in start_indices:
-        balance = 0
-        for i in range(start, len(text)):
-            char = text[i]
-            if char == '{':
-                balance += 1
-            elif char == '}':
-                balance -= 1
-            
-            if balance == 0:
-                # Potential JSON block found
-                candidate = text[start:i+1]
-                # Fast pre-check before parsing
-                if '"tool"' in candidate: 
-                    try:
-                        obj = json.loads(candidate)
-                        if obj.get("tool") == "python":
-                            return obj
-                    except:
-                        pass
-                break # Move to next start if this block was balanced but invalid
-                
-    return None
 
 def requires_numeric_tool(text: str) -> bool:
     keywords = [
@@ -794,292 +998,140 @@ def handle_message(
     user_text: str,
     reasoning_level: str,
     recheck: bool = False
-) -> dict:
+):
     """
-    Research-grade message handler with:
-    - Deterministic tool enforcement
-    - Guaranteed result exposition
-    - NO silent success in Research mode
-    - NO empty replies
+    Advanced iterative message handler (Unified Loop Version):
+    Yields JSON events for the UI.
     """
-
-    # =========================================================
-    # USER INPUT
-    # =========================================================
     session.append_user(user_text)
 
-    # =========================================================
-    # SPECIAL MODE: EXPERT (DeepSeek R1)
-    # =========================================================
-    if reasoning_level == "expert":
-        # Switch system prompt temporarily or permanently for this session?
-        # For simplicity, we assume session is consistent, but let's just force the prompt content
+    # Reasoning Config
+    is_expert = (reasoning_level == "expert")
+    if is_expert:
         session.set_system_prompt(SYSTEM_PROMPT_EXPERT)
-        
-        # Expert mode is simpler: It just calls R1. R1 is smart enough to plan/execute.
-        # We allow it to return tool calls if it wants, but we don't force it as strictly.
-        assistant_raw = call_expert_model(session.history)
-        
-        # Check if R1 decided to use a tool (formatted in JSON block)
-        tool_inst = extract_strict_json(assistant_raw)
+        call_fn = call_expert_model_stream
+    else:
+        session.set_system_prompt(SYSTEM_PROMPT)
+        call_fn = lambda hist, temp=0.5: call_model_stream(hist, reasoning_level=reasoning_level, temperature=temp)
 
-        # RETRY: If tool appears required but wasn't used, force it once.
-        if tool_inst is None and requires_tool(user_text):
-            logger.info("EXPERT: Tool required but missing. Forcing verification.")
-            session.append_user(
-                "Verify this result using Python. Output the JSON tool block."
-            )
-            assistant_raw = call_expert_model(session.history)
-            tool_inst = extract_strict_json(assistant_raw)
+    def process_stream(stream_obj, step_label=None):
+        full_text = ""
+        for chunk in stream_obj:
+            if not getattr(chunk, "choices", None) or len(chunk.choices) == 0:
+                continue
+            delta = chunk.choices[0].delta
+            
+            # NVIDIA GLM5 Reasoning - Yield as dedicated 'thinking' type
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                yield {"type": "thinking", "content": reasoning}
+            
+            if delta.content:
+                content = delta.content
+                full_text += content
+                yield {"type": "delta", "content": content, "step": step_label}
+        return full_text
+
+    # --- Unified Iterative Loop ---
+    max_iterations = 10
+    tool_outputs = []
+    cont = True # Track if model wants to continue tool usage
+    synthesis_started = False
+    
+    # Pre-loop logic: if it needs a tool, encourage it.
+    if requires_tool(user_text):
+        session.history.append({
+            "role": "system",
+            "content": "This problem likely requires computation or derivation. You can use the 'ipython' tool for verification, or provide a reasoned explanation if information is missing."
+        })
+
+    for i in range(max_iterations):
+        if i == 0:
+            if requires_tool(user_text):
+                step_label = "Reasoning"
+                yield {"type": "status", "content": "Analyzing request..."}
+            else:
+                step_label = "Final Answer"
+        else:
+            # If the previous tool call said 'continue: false', this is the final synthesis.
+            if not cont:
+                if synthesis_started:
+                    break
+                step_label = "Final Answer"
+                yield {"type": "status", "content": "Synthesizing final answer..."}
+                synthesis_started = True
+            else:
+                step_label = f"Step {i} Reasoning"
+                yield {"type": "status", "content": f"Analyzing results (Step {i})..."}
+
+        stream = call_fn(session.history, temp=TEMP_PLANNING if i == 0 else TEMP_EXECUTION)
+        assistant_raw = ""
         
-        tool_output = None
+        # Stream the thought/plan
+        for event in process_stream(stream, step_label):
+            if isinstance(event, dict) and event["type"] == "delta":
+                assistant_raw += event["content"]
+            yield event
+        
+        # Look for tool instruction in the response
+        tool_inst = extract_ipython_instruction(assistant_raw)
         
         if tool_inst:
             code = tool_inst.get("code", "")
-            verify_mode = tool_inst.get("verify", "none")
+            mode = tool_inst.get("mode", "exec")
             
-            logger.info(f"EXPERT TOOL EXECUTION: {verify_mode}")
+            # Update continuation flag
+            cont = tool_inst.get("continue", True) 
             
-            if verify_mode == "sympy":
-                stdout, stderr, rc = run_sympy_check(code)
-            else:
-                stdout, stderr, rc = run_python_sandbox(code)
+            logger.info(f"ITERATION {i+1} | Mode: {mode}")
+            yield {"type": "tool_call", "code": code, "mode": mode, "step": i+1}
             
-            tool_output = {
-                "stdout": stdout or "",
-                "stderr": stderr or "",
-                "rc": rc,
-                "verify": verify_mode
-            }
+            result = session.executor.execute(code, mode=mode)
+            tool_outputs.append(result)
+            yield {"type": "tool_output", "output": result, "step": i+1}
             
-            # Feed result back to Expert R1
-            session.append_user(
-                f"TOOL OUTPUT:\n{stdout[:12000]}\nSTDERR:\n{stderr}\n\n"
-                "Please interpret this result and provide the final expert answer."
-            )
+            # Prepare feedback for next turn
+            session.append_assistant(assistant_raw)
+            stdout_vis = result["stdout"][:8000]
+            stderr_vis = result["stderr"][:2000]
+            feedback = f"EXECUTION OUTPUT (Step {i+1}):\nSTDOUT:\n{stdout_vis}\nSTDERR:\n{stderr_vis}"
+            if result.get("figures"):
+                feedback += f"\n[Captured {len(result['figures'])} matplotlib figures]"
             
-            final_answer = call_expert_model(session.history)
+            snapshot = session.executor.get_namespace_snapshot()
+            if snapshot:
+                feedback += f"\nCURRENT VARIABLES: {json.dumps(snapshot)}"
+
+            session.history.append({"role": "system", "content": feedback})
             
-            session.append_assistant(final_answer)
-            return {
-                "reply": wrap_pure_math(final_answer),
-                "raw": assistant_raw,
-                "tool_output": tool_output
-            }
-        
-        # No tool used, direct answer
-        session.append_assistant(assistant_raw)
-        return {
-            "reply": wrap_pure_math(assistant_raw),
-            "raw": assistant_raw,
-            "tool_output": None
-        }
-
-    # =========================================================
-    # PHASE 1: PLANNING / INITIAL RESPONSE (Standard Modes)
-    # =========================================================
-    # Ensure standard prompt
-    session.set_system_prompt(SYSTEM_PROMPT)
-
-    assistant_raw = call_model_with_history(
-        session.history,
-        reasoning_level=reasoning_level,
-        temperature=TEMP_PLANNING
-    )
-
-    # =========================================================
-    # TOOL DETECTION
-    # =========================================================
-    tool_inst = extract_strict_json(assistant_raw)
-
-    # ---------- HARD TOOL RETRY (STRICT JSON) ----------
-    if (
-        tool_inst is None
-        and reasoning_level == "high"
-        and isinstance(assistant_raw, str)
-        and "tool" in assistant_raw.lower()
-    ):
-        logger.warning("Tool response malformed. Forcing strict JSON retry.")
-
-        session.append_user(
-            "TOOL MODE VIOLATION.\n"
-            "Respond AGAIN with ONLY valid JSON.\n"
-            "No text. No Markdown. JSON must start at character 1."
-        )
-
-        assistant_raw = call_model_with_history(
-            session.history,
-            reasoning_level=reasoning_level,
-            temperature=0.1
-        )
-
-        tool_inst = extract_strict_json(assistant_raw)
-
-    # ---------- FORCED TOOL REPHRASE ----------
-    if (
-        reasoning_level == "high"
-        and tool_inst is None
-        and requires_tool(user_text)
-    ):
-        # 🔁 NEW: mixed explanation + calculation → FAST fallback
-        if should_fallback_to_fast(user_text):
-            logger.warning("Mixed calc + explanation detected. Falling back to FAST mode.")
-
-            fast_answer = call_model_with_history(
-                session.history,
-                reasoning_level="low",      # FAST
-                temperature=0.7
-            )
-
-            visible = fast_answer.strip()
-            visible = wrap_pure_math(visible)
-
-            session.append_assistant(visible)
-
-            return {
-                "reply": visible,
-                "raw": fast_answer,
-                "tool_output": None,
-                "fallback": "fast"
-            }
-
-        # Otherwise: enforce tool as before
-        logger.warning("Tool required but not used. Forcing tool-only rewrite.")
-
-        session.append_user(
-            "This problem REQUIRES verified computation.\n"
-            "Rewrite your response as a Python tool invocation. You MUST print the final numerical or symbolic result using print(). Return ONLY strict JSON.\n"
-            "Return ONLY strict JSON.\n"
-            "Do NOT explain yet."
-        )
-
-        assistant_raw = call_model_with_history(
-            session.history,
-            reasoning_level=reasoning_level,
-            temperature=0.2
-        )
-
-        tool_inst = extract_strict_json(assistant_raw)
-
-    # =========================================================
-    # 🚨 HARD FAIL (THE CRITICAL FIX)
-    # =========================================================
-    if (
-        reasoning_level == "high"
-        and requires_tool(user_text)
-        and tool_inst is None
-    ):
-        logger.error("RESEARCH FAILURE: Tool required but not produced.")
-        return fast_fallback(session, user_text)
-
-    # =========================================================
-    # INIT OUTPUT HOLDERS
-    # ========================================
-    tool_output = None
-    proof_check = None
-
-    # =========================================================
-    # CASE A: TOOL-BASED PATH
-    # =========================================================
-    if tool_inst:
-        code = tool_inst.get("code", "")
-        verify_mode = tool_inst.get("verify", "none")
-
-        # -------------------------
-        # PHASE 2: EXECUTION
-        # -------------------------
-        if verify_mode == "sympy":
-            logger.info("Running SymPy verification...")
-            stdout, stderr, rc = run_sympy_check(code)
+            # If model explicitly said continue: false, we've fulfilled its tool needs.
+            # We'll continue the loop one more time to let it see the results and provide the Final Answer.
+            if not cont:
+                logger.info("Model signaled end of tool chain. Moving to synthesis.")
         else:
-            logger.info("Running standard Python...")
-            stdout, stderr, rc = run_python_sandbox(code)
+            # No tool call found -> This was the final answer or a direct response
+            # Append to history so recheck and future turns can see it.
+            session.append_assistant(assistant_raw)
+            break
 
-        tool_output = {
-            "stdout": stdout or "",
-            "stderr": stderr or "",
-            "rc": rc,
-            "verify": verify_mode
-        }
-
-        # -------------------------
-        # PHASE 3: EXPOSITION
-        # -------------------------
-        session.append_user(
-            "The computation has completed.\n\n"
-            "RAW TOOL OUTPUT:\n"
-            f"{stdout[:12000]}\n\n"
-            "INSTRUCTIONS:\n"
-            "- Explicitly state the final results.\n"
-            "- Briefly explain the verification.\n"
-            "- Do NOT say 'computed successfully'.\n"
-            "- Do NOT rerun tools."
-        )
-
-        final_answer = call_model_with_history(
-            session.history,
-            reasoning_level=reasoning_level,
-            temperature=TEMP_EXPOSITION
-        )
-
-        annotated_answer = strip_tool_json(final_answer).strip()
-
-        # ---------- HARD GUARANTEE: RESULTS MUST APPEAR ----------
-        if not annotated_answer or "computed successfully" in annotated_answer.lower():
-            logger.warning("Exposition missing results. Injecting tool output.")
-
-            if stdout.strip():
-                annotated_answer = (
-                    "### Result\n\n"
-                    f"```\n{stdout.strip()}\n```"
-                )
-            else:
-                return fast_fallback(session, user_text)
-
-        annotated_answer = wrap_pure_math(annotated_answer)
-
-        # -------------------------
-        # PHASE 4: OPTIONAL RECHECK
-        # -------------------------
-        if recheck:
-            logger.info("Running GLM recheck...")
-            proof_check = glm_proof_check(user_text, annotated_answer)
-
+    # Optional Recheck
+    if recheck:
+        yield {"type": "status", "content": "Performing independent recheck..."}
+        # Get final text from history
+        final_text = ""
+        for m in reversed(session.history):
+            if m["role"] == "assistant":
+                final_text = m["content"]
+                break
+        
+        if final_text:
+            proof_check = glm_proof_check(user_text, final_text)
             verdict = proof_check.get("verdict", "uncertain")
             confidence = CONFIDENCE_BY_VERDICT.get(verdict, 0.6)
+            reply_recheck = f"\n\n---\n**Proof Recheck:** `{verdict.upper()}`\n**Confidence:** {confidence}"
+            yield {"type": "delta", "content": reply_recheck, "step": "Final Answer"}
 
-            annotated_answer += (
-                "\n\n---\n"
-                f"**Proof Recheck:** `{verdict.upper()}`  \n"
-                f"**Confidence:** {confidence}"
-            )
-
-        session.append_assistant(annotated_answer)
-
-        return {
-            "reply": annotated_answer,
-            "raw": assistant_raw,
-            "tool_output": tool_output,
-            "proof_check": proof_check
-        }
-
-    # =========================================================
-    # CASE B: NO TOOL (FAST / ANALYTICAL ONLY)
-    # =========================================================
-    visible_answer = strip_tool_json(assistant_raw).strip()
-
-    if not visible_answer:
-        return fast_fallback(session, user_text)
-
-
-    visible_answer = wrap_pure_math(visible_answer)
-    session.append_assistant(visible_answer)
-
-    return {
-        "reply": visible_answer,
-        "raw": assistant_raw,
-        "tool_output": None
-    }
+    yield {"type": "done"}
 
 
 
@@ -1342,52 +1394,26 @@ def chat_route():
 
         sess = ResearchSession(sess_id)
 
-        # -------------------------
-        # MAIN PIPELINE
-        # -------------------------
-        res = handle_message(
-            sess,
-            msg,
-            r_level,
-            recheck=recheck
+        def stream_response():
+            # Initial cookie or ID sync? We'll just yield sess_id if needed, but SSE usually uses response headers.
+            # But we can't set cookies in a stream easily without a wrapper.
+            # Flask's Response handles headers.
+            
+            generator = handle_message(
+                sess,
+                msg,
+                r_level,
+                recheck=recheck
+            )
+            
+            for event in generator:
+                yield f"data: {json.dumps(event)}\n\n"
+
+        return Response(
+            stream_with_context(stream_response()),
+            mimetype="text/event-stream",
+            headers={"X-Session-ID": sess_id}
         )
-
-        reply = res.get("reply", "")
-
-        # -------------------------
-        # HARD GUARANTEE: NEVER EMPTY
-        # -------------------------
-        if not isinstance(reply, str) or not reply.strip():
-            reply = (
-                "### Result\n\n"
-                "_Response generated successfully._"
-            )
-
-        # -------------------------
-        # POST-PROCESSING RULES
-        # -------------------------
-        tool_used = bool(res.get("tool_output"))
-
-        if not tool_used:
-            # DO NOT touch proofs
-            if not is_proof_only(reply):
-                reply = strip_latex_lists(reply)
-                # ❌ strip_latex_math_layout REMOVED (critical)
-
-        # ✅ Normalize math ONCE, LAST
-        reply = normalize_math(reply)
-
-        if not reply.strip():
-            reply = (
-                "### Result\n\n"
-                "_Response generated successfully._"
-            )
-
-        res["reply"] = reply
-
-        resp = jsonify(res)
-        resp.set_cookie("session_id", sess.id, httponly=True)
-        return resp
 
     except Exception as e:
         logger.exception("Chat Error")
@@ -1419,7 +1445,10 @@ HTML_PAGE = r"""
     <!-- MathJax -->
     <script>
         window.MathJax = {
-            tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+            tex: { 
+                inlineMath: [['\\(', '\\)'], ['$', '$']], 
+                displayMath: [['\\[', '\\]'], ['$$', '$$']] 
+            },
             svg: { fontCache: 'global' }
         };
     </script>
@@ -1727,6 +1756,58 @@ HTML_PAGE = r"""
             white-space: pre-wrap;
         }
 
+        /* Thinking Section */
+        .thinking-container {
+            margin-bottom: 1rem;
+            border-left: 2px solid var(--accent);
+            padding-left: 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 0 8px 8px 0;
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+
+        .thinking-header {
+            font-size: 0.8rem;
+            color: var(--accent);
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .thinking-content {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            line-height: 1.5;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(99, 102, 241, 0.2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .step-label {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            margin-top: 12px;
+            margin-bottom: 4px;
+        }
+
         /* ---------- TYPING INDICATOR ---------- */
         #typing-indicator {
             display: none;
@@ -2013,15 +2094,29 @@ HTML_PAGE = r"""
     });
 
     function renderContent(text) {
+        // Hide JSON tool blocks from delta stream rendering to avoid redundancy
+        text = text.replace(/```json\s*\{\s*"tool":\s*"ipython"[\s\S]*?\}\s*```/g, '');
+        text = text.replace(/\{\s*"tool":\s*"ipython"[\s\S]*?\}/g, '');
+        // Also catch cases where tool name might be slightly different or without quotes in some models
+        text = text.replace(/```json\s*\{[\s\S]*?"tool":\s*"ipython"[\s\S]*?\}\s*```/g, '');
+
         const mathBlocks = [];
 
-        // 1️⃣ Extract block math
+        // 1️⃣ Extract block math ($$ ... $$ and \[ ... \])
+        text = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => {
+            mathBlocks.push({ type: "block", content: m });
+            return `@@BLOCK_${mathBlocks.length - 1}@@`;
+        });
         text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => {
             mathBlocks.push({ type: "block", content: m });
             return `@@BLOCK_${mathBlocks.length - 1}@@`;
         });
 
-        // 2️⃣ Extract inline math
+        // 2️⃣ Extract inline math ($ ... $ and \( ... \))
+        text = text.replace(/\$([\s\S]*?)\$/g, (_, m) => {
+            mathBlocks.push({ type: "inline", content: m });
+            return `@@INLINE_${mathBlocks.length - 1}@@`;
+        });
         text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => {
             mathBlocks.push({ type: "inline", content: m });
             return `@@INLINE_${mathBlocks.length - 1}@@`;
@@ -2037,8 +2132,8 @@ HTML_PAGE = r"""
         mathBlocks.forEach((m, i) => {
             const latex =
                 m.type === "block"
-                    ? `\\[${m.content}\\]`
-                    : `\\(${m.content}\\)`;
+                    ? (m.content.includes('$$') ? m.content : `$$${m.content}$$`)
+                    : (m.content.includes('$') ? m.content : `$${m.content}$`);
 
             html = html
                 .replace(`@@BLOCK_${i}@@`, latex)
@@ -2058,12 +2153,12 @@ HTML_PAGE = r"""
 
         appendMsg('user', val);
 
-        // Show Typing Indicator
+        // Show Typing Indicator (initial)
         typingIndicator.style.display = 'block';
         chat.scrollTop = chat.scrollHeight;
 
         try {
-            const res = await fetch('chat', {
+            const response = await fetch('chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2073,24 +2168,178 @@ HTML_PAGE = r"""
                 })
             });
 
-            const data = await res.json();
+            if (!response.ok) throw new Error('Network response was not ok');
 
-            // Hide Typing Indicator
-            typingIndicator.style.display = 'none';
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            let lastType = null;
+            let lastStep = null;
+            let currentContentEl = null;
+            let currentThinkingContainer = null;
+            let responseHasLabel = false;
+            let buffer = '';
 
-            if (data.tool_output) {
-                const toolDiv = document.createElement('div');
-                toolDiv.className = 'msg assistant';
-                toolDiv.innerHTML = `
-                    <div class="msg-label">AI:</div>
-                    <div class="tool-output">$ python3 tool.py [Mode: ${data.tool_output.verify}]\n${data.tool_output.stdout}</div>`;
-                chat.appendChild(toolDiv);
+            const stopSpinner = () => {
+                const spinners = chat.querySelectorAll('.spinner');
+                spinners.forEach(spinner => {
+                    spinner.className = 'dot';
+                    spinner.style.width = '8px';
+                    spinner.style.height = '8px';
+                    spinner.style.background = 'var(--success)';
+                    spinner.style.borderRadius = '50%';
+                    spinner.style.animation = 'none';
+                    spinner.innerHTML = '<span style="color:var(--success); font-size:10px; position:relative; top:-2px;">✓</span>';
+                    spinner.style.display = 'flex';
+                    spinner.style.alignItems = 'center';
+                    spinner.style.justifyContent = 'center';
+                });
+            };
+
+            const ensureAssistantLabel = (msgDiv) => {
+                if (!responseHasLabel) {
+                    const label = document.createElement('div');
+                    label.className = 'msg-label';
+                    label.textContent = 'AI:';
+                    msgDiv.prepend(label);
+                    responseHasLabel = true;
+                }
+            };
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // Keep potential incomplete line in buffer
+
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+                    
+                    let data;
+                    try {
+                        data = JSON.parse(trimmedLine.substring(6));
+                    } catch(e) { 
+                        console.error("JSON Parse Error:", e, trimmedLine);
+                        continue; 
+                    }
+
+                    typingIndicator.style.display = 'none';
+
+                    if (data.type === 'status') {
+                        stopSpinner();
+                        currentThinkingContainer = document.createElement('div');
+                        currentThinkingContainer.className = 'msg assistant';
+                        currentThinkingContainer.innerHTML = `
+                            <div class="thinking-container">
+                                <div class="thinking-header">
+                                    <div class="spinner"></div>
+                                    ${data.content}
+                                </div>
+                            </div>`;
+                        ensureAssistantLabel(currentThinkingContainer);
+                        chat.appendChild(currentThinkingContainer);
+                        lastType = 'status';
+                        lastStep = data.content;
+                        currentContentEl = null;
+                    } 
+                    else if (data.type === 'thinking') {
+                        if (lastType !== 'thinking' || !currentContentEl) {
+                            stopSpinner();
+                            const msgDiv = document.createElement('div');
+                            msgDiv.className = 'msg assistant';
+                            msgDiv.innerHTML = `
+                                <div class="thinking-container">
+                                    <div class="thinking-header">Thought</div>
+                                    <div class="thinking-content msg-content"></div>
+                                </div>`;
+                            ensureAssistantLabel(msgDiv);
+                            currentContentEl = msgDiv.querySelector('.msg-content');
+                            chat.appendChild(msgDiv);
+                            lastType = 'thinking';
+                            lastStep = 'Thought';
+                        }
+                        currentContentEl.dataset.raw = (currentContentEl.dataset.raw || '') + data.content;
+                        currentContentEl.innerHTML = renderContent(currentContentEl.dataset.raw);
+                    }
+                    else if (data.type === 'delta') {
+                        const stepKey = data.step || 'Reasoning';
+                        const isFinal = (stepKey === 'Final Answer' || stepKey === 'Recheck');
+                        const isContinuationOfFinal = isFinal && (lastStep === 'Final Answer' || lastStep === 'Recheck');
+
+                        if (!isContinuationOfFinal && (lastType !== 'delta' || lastStep !== stepKey || !currentContentEl)) {
+                            stopSpinner();
+                            const msgDiv = document.createElement('div');
+                            msgDiv.className = 'msg assistant';
+                            
+                            if (isFinal) {
+                                msgDiv.innerHTML = `<div class="msg-content"></div>`;
+                                currentContentEl = msgDiv.querySelector('.msg-content');
+                            } else {
+                                msgDiv.innerHTML = `
+                                    <div class="thinking-container">
+                                        <div class="thinking-header">${stepKey}</div>
+                                        <div class="thinking-content msg-content"></div>
+                                    </div>`;
+                                currentContentEl = msgDiv.querySelector('.msg-content');
+                            }
+                            ensureAssistantLabel(msgDiv);
+                            chat.appendChild(msgDiv);
+                        }
+                        
+                        lastType = 'delta';
+                        lastStep = stepKey;
+                        currentContentEl.dataset.raw = (currentContentEl.dataset.raw || '') + data.content;
+                        currentContentEl.innerHTML = renderContent(currentContentEl.dataset.raw);
+                    }
+                    else if (data.type === 'tool_call') {
+                        stopSpinner();
+                        const toolDiv = document.createElement('div');
+                        toolDiv.className = 'msg assistant';
+                        toolDiv.innerHTML = `
+                            <div class="step-label">Step ${data.step}</div>
+                            <div class="tool-output" style="color:var(--text-muted)">$ ipython [Mode: ${data.mode}]\n${data.code}</div>`;
+                        ensureAssistantLabel(toolDiv);
+                        chat.appendChild(toolDiv);
+                        lastType = 'tool';
+                        lastStep = `Step ${data.step}`;
+                        currentContentEl = null;
+                    }
+                    else if (data.type === 'tool_output') {
+                        const tout = data.output;
+                        const toolDiv = document.createElement('div');
+                        toolDiv.className = 'msg assistant';
+                        let figHTML = '';
+                        if (tout.figures && tout.figures.length > 0) {
+                            tout.figures.forEach(fig => {
+                                figHTML += `<img src="data:image/png;base64,${fig}" style="max-width:100%; border-radius:8px; margin-top:10px; border:1px solid var(--border);">`;
+                            });
+                        }
+                        toolDiv.innerHTML = `
+                            <div class="tool-output">$ ipython [Result: ${tout.success ? 'OK' : 'FAIL'}]\n${tout.stdout}${tout.stderr ? '\nERR: ' + tout.stderr : ''}</div>
+                            ${figHTML}`;
+                        ensureAssistantLabel(toolDiv);
+                        chat.appendChild(toolDiv);
+                        lastType = 'output';
+                        lastStep = `Step ${data.step}`;
+                        currentContentEl = null;
+                    }
+                    else if (data.type === 'done') {
+                        stopSpinner();
+                        if (currentContentEl) {
+                            MathJax.typesetPromise([currentContentEl.closest('.msg')]);
+                        }
+                    }
+                    chat.scrollTop = chat.scrollHeight;
+                }
             }
 
-            appendMsg('assistant', data.reply);
-        } catch {
+        } catch (err) {
+            console.error(err);
             typingIndicator.style.display = 'none';
-            appendMsg('assistant', 'Network error');
+            appendMsg('assistant', 'Error: ' + err.message);
         }
 
         input.disabled = false;
@@ -2119,6 +2368,15 @@ HTML_PAGE = r"""
         MathJax.typesetPromise([div]);
     }
 
+    // Auto-focus input when typing
+    document.addEventListener('keydown', (e) => {
+        if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+            if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                input.focus();
+            }
+        }
+    });
+
     input.addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
 </script>
 </body>
@@ -2135,5 +2393,5 @@ if __name__ == "__main__":
     app.register_blueprint(rigor_bp, url_prefix='/rigor')
     @app.route('/')
     def root(): return Response('<a href="/rigor">Go to ZYLO RIGOR</a>')
-    app.run(host="0.0.0.0", port=50051, debug=False)
-
+    app.run(host="0.0.0.0", port=PORT, debug=False)
+            
