@@ -255,33 +255,70 @@ pip install -r requirements.txt
 ```
 
 ### 3. Configuration
-The system relies on environment variables for API keys and configuration. Create a `.env` file or export them:
+The system relies on environment variables for API keys and configuration. Create a `.env` file or export them or hard code them replacing `paste_your_api_key_here`:
 
-```bash
-# General
-export ZYLO_SECRET_KEY="your_super_secret_key"
+ZYLO_RIGOR:
 
-# ZYLO LINK (AI Chat)
-export GROQ_API_KEY="gsk_..."  # Optional, falls back to internal key
 
-# ZYLO RiG0R (Compute)
-export CEREBRAS_API_KEY="csk-..."
-export OSS_SERVER_DATA="./oss_server_data"
+```python
+# -------------------------
+# Configuration (env-first)
+# -------------------------
+CEREBRAS_KEYS = [
+    os.getenv("CEREBRAS_API_KEY", "paste_your_api_key_here"),
+    "paste_your_api_key_here"
+]
+MODEL_NAME = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
+# NVIDIA Expert Mode Config
+NVIDIA_API_KEY = "paste_your_api_key_here"
+EXPERT_MODEL = "z-ai/glm5"
 
-# ZYLO ZENITH (Multi-Model AI)
-export NVIDIA_API_KEY="nvapi-..."
-export GEMINI_API_KEY="AIza..."
-export ZHIPU_API_KEY="..."
-export OPENROUTER_API_KEY="sk-or-..."
-export TAVILY_API_KEY="tvly-..."
-export ZENROWS_API_KEY="..."
-export TTS_TALK_SCRIPT="/path/to/talk.py" # Optional, for NVIDIA TTS
-
-# ZYLO CLOUD
-export CLOUD_PASSWORD="your_password"
+GLM_API_KEY = os.getenv("ZHIPU_API_KEY", "paste_your_api_key_here")
+GLM_MODEL = "glm-4.7"
+PORT = int(os.getenv("PORT", "5005"))
+DATA_DIR = os.getenv("OSS_SERVER_DATA", "./oss_server_data")
+SESSION_DIR = os.path.join(DATA_DIR, "sessions")
+LOGFILE = os.path.join(DATA_DIR, "server.log")
 ```
 
-*Note: Some keys have default development values in the source. **Change these immediately for any real deployment.***
+Weather:
+
+
+```python
+# --- CONFIGURATION ---
+API_KEY = "paste_your_api_key_here"
+BASE_URL = "http://api.weatherapi.com/v1/current.json"
+QUERY = "Bolpur"
+REFRESH_SECONDS = 30
+TTS_API_KEY = os.getenv("NVIDIA_TTS_API_KEY", "paste_your_api_key_here")
+TTS_FUNCTION_ID = os.getenv("NVIDIA_TTS_FUNCTION_ID", "paste_your_api_key_here")
+TTS_SERVER = os.getenv("NVIDIA_TTS_SERVER", "grpc.nvcf.nvidia.com:443")
+TTS_TALK_SCRIPT = os.getenv("TTS_TALK_SCRIPT", "/home/ujan/python-clients/scripts/tts/talk.py")
+ENERGETIC_VOICE_ID = "Magpie-Multilingual.EN-US.Aria.Happy"
+```
+
+AI~ZENITH:
+```python
+# ====================== CONFIGURATION ======================
+API_KEY = os.getenv("NVIDIA_API_KEY", "paste_your_api_key_here")
+BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "paste_your_api_key_here")
+ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "paste_your_api_key_here")
+
+# NEW KEYS
+OPENROUTER_API_KEY = "paste_your_api_key_here"
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "paste_your_api_key_here")
+ZENROWS_API_KEY = os.getenv("ZENROWS_API_KEY", "paste_your_api_key_here")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "paste_your_api_key_here")
+SCRAPERAPI_KEY = "paste_your_api_key_here"
+
+# NVIDIA TTS (from voice.py)
+TTS_API_KEY = os.getenv("NVIDIA_TTS_API_KEY", "paste_your_api_key_here")
+TTS_FUNCTION_ID = os.getenv("NVIDIA_TTS_FUNCTION_ID", "877104f7-e885-42b9-8de8-f6e4c6303969")
+TTS_SERVER = os.getenv("NVIDIA_TTS_SERVER", "grpc.nvcf.nvidia.com:443")
+# Use absolute path found via search to ensure it works regardless of CWD
+TTS_TALK_SCRIPT = os.getenv("TTS_TALK_SCRIPT", "/home/ujan/python-clients/scripts/tts/talk.py")
+```
 
 ### 4. Run the Platform
 The main entry point is `app.py`, which utilizes `socketio` to run the server.
