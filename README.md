@@ -63,6 +63,7 @@ ZYLO UNIFIED brings together the following research projects:
 * **ZYLO ZENITH** — Unified Multi-Model Intelligence & Media Engine
 * **ZYLO LINK** — Secure real‑time communication with AI integration
 * **ZYLO RiG0R** — Formal mathematics and physics verification engine
+* **ZYLO FEELS** — Context-aware weather intelligence with live UI, LLM summaries, and voice playback
 * **ZYLO CLOUD** — Private, self‑hosted cloud storage and filesystem with user-specific quotas and integrated user accounts. Now features a "Premium storage vault" description on the landing page.
 * **ZYLO VEIL** — Experimental cryptographic steganography and destructive security
 
@@ -188,10 +189,21 @@ Advanced steganography and data hiding.
 
 ### 4. ZYLO RiG0R (`ZYlO_RiG0R.py`)
 A formal verification engine for AI outputs.
-*   **Mode A (Tool Mode)**: Forces the AI to write executable Python/SymPy code to mathematically prove its answers.
-*   **Mode B (Direct Answer)**: For purely theoretical concepts.
-*   **Verification**: Automatically runs generated code in a sandbox to validate results against the AI's claims.
-*   **Confidence Calibration**: Assigns reliability scores to answers based on verification success.
+*   **Iterative Tool Workflow**: Uses a strict JSON `ipython` tool protocol to generate, execute, and refine small computation steps.
+*   **Persistent IPython Runtime**: Keeps per-session variables and execution history for multi-step math/physics work.
+*   **Dual Reasoning Engines**: Standard path on Cerebras (`gpt-oss-120b`) with an Expert path on NVIDIA (`z-ai/glm5`) and streamed thinking traces.
+*   **Independent Recheck**: Optional GLM-based proof recheck returns verdicts (`correct` / `incorrect` / `uncertain`) plus calibrated confidence.
+*   **Safety & Output Normalization**: Sandboxed execution, resource limits, tool-output fallback rendering, and MathJax-safe response cleanup.
+
+#### RiG0R Step-by-Step Precision Pipeline
+1. The server receives a question and selects the reasoning path (`low`, `medium`, `high`, or `expert`).
+2. For computational prompts, the model is guided to emit a strict JSON tool call with `{"tool":"ipython","code":"...","mode":"...","continue":...}`.
+3. The code executes in a persistent per-session IPython executor with preloaded math/science libraries (SymPy, NumPy, Matplotlib).
+4. RiG0R captures `stdout`, `stderr`, generated plots, and current variable snapshots, then injects them back into context.
+5. The model iterates in short steps until it signals `continue: false`, ensuring traceable intermediate verification.
+6. A final synthesis pass produces the answer, with math-format normalization and tool-leak cleanup for precise, readable output.
+7. If enabled, independent proof recheck runs through GLM-4.7 and appends verdict plus confidence calibration.
+8. In `expert` mode, solving is streamed through NVIDIA GLM5 (`z-ai/glm5`) with advanced reasoning traces before final exposition.
 
 <p align="center">
   <img src="assets/ui21.png" width="1008" alt="ZYLO LINK UI Preview 4">
@@ -204,11 +216,32 @@ A formal verification engine for AI outputs.
 
 ### 5. ZYLO ZENITH (`AI~Zenith.py`)
 A premium, multi-model unified intelligence interface.
-*   **Multi-Model Orchestration**: Seamless switching between OpenAI, Google Gemini, OpenRouter, and Cerebras models.
-*   **Real-time Web Search**: Integrated Tavily/ZenRows search for up-to-date information retrieval.
-*   **Multimodal Generation**: Create images and videos using ZhipuAI's CogView and CogVideoX.
-*   **Neural TTS**: High-quality voice synthesis via NVIDIA Magpie (requires external script) or gTTS fallback.
-*   **Reasoning Toggle**: Enable "Chain of Thought" reasoning for complex problem solving (supports DeepSeek R1, Kimi k2).
+*   **Expanded Model Stack**: NVIDIA-hosted models (GPT-OSS, Mistral, Qwen, MiniMax, GLM, Kimi, DeepSeek, Llama/Nemotron) plus Gemini.
+*   **Provider Fallback Chain**: Primary streaming on NVIDIA, targeted GLM fallback to Cerebras, then OpenRouter as final backup.
+*   **Search & Deep Research Modes**: Real-time search via Tavily/ZenRows and deeper retrieval via ScraperAPI, including direct URL scraping.
+*   **Multimodal Chat + Media Generation**: Image/file-aware chat input and one-click image/video generation (CogView-3-Flash, CogVideoX-Flash).
+*   **Unified Voice Output**: `/zenith/generate_audio` supports NVIDIA Magpie TTS with automatic gTTS fallback.
+
+### 6. ZYLO FEELS (`weather.py`)
+An intelligent weather briefing module integrated into the main dashboard (`/feels`).
+*   **Structured Weather Intelligence**: Normalized location, top metrics, wind, and air-quality blocks from WeatherAPI.
+*   **AQI-Aware Summaries**: Computes PM2.5-based US AQI values and enriches interpretation with LLM-generated concierge-style summaries.
+*   **Smart Summary Caching**: Reuses speech summaries when core weather metrics are unchanged to reduce redundant model calls.
+*   **Cross-Module TTS Compatibility**: Supports both `/api/speak` and `/zenith/generate_audio`, with NVIDIA Magpie first and gTTS fallback.
+*   **Interactive UI**: Live location switching, metric cards, and one-tap spoken weather playback.
+
+#### Weather Summary Flow
+1. `fetch_weather()` retrieves live WeatherAPI data with AQI enabled, then normalizes it into `Location`, `TopMetrics`, `Wind`, and `Other`.
+2. `format_payload()` computes additional context such as PM2.5-derived US AQI value and mapped AQI status labels.
+3. `generate_llm_summary()` produces a concise concierge-style summary using NVIDIA-hosted Mistral.
+4. A metric-aware cache (`WEATHER_STATE_CACHE`) reuses prior summaries when temperature/condition/AQI/city are unchanged.
+5. `build_weather_open_summary()` prepares the compact UI summary; `build_weather_summary_text()` prepares detailed speech fallback text.
+
+#### Other `weather.py` Features
+1. Dual TTS synthesis path: NVIDIA Magpie via `talk.py`, with automatic `gTTS` fallback on failure.
+2. Shared audio endpoint compatibility for both standalone weather and Zenith routes.
+3. Voice profile mapping for multiple Magpie styles and region-aware gTTS fallbacks.
+4. Live location editing from the FEELS UI with immediate weather refresh and speech regeneration.
 
 ---
 
@@ -279,6 +312,17 @@ PORT = int(os.getenv("PORT", "5005"))
 DATA_DIR = os.getenv("OSS_SERVER_DATA", "./oss_server_data")
 SESSION_DIR = os.path.join(DATA_DIR, "sessions")
 LOGFILE = os.path.join(DATA_DIR, "server.log")
+
+# Phase-aware generation controls
+TEMP_PLANNING = 0.65
+TEMP_EXECUTION = 0.0
+TEMP_EXPOSITION = 0.03
+
+CONFIDENCE_BY_VERDICT = {
+    "correct": 0.97,
+    "uncertain": 0.65,
+    "incorrect": 0.25
+}
 ```
 
 Weather:
@@ -290,6 +334,8 @@ API_KEY = "paste_your_api_key_here"
 BASE_URL = "http://api.weatherapi.com/v1/current.json"
 QUERY = "Bolpur"
 REFRESH_SECONDS = 30
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "paste_your_api_key_here")
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 TTS_API_KEY = os.getenv("NVIDIA_TTS_API_KEY", "paste_your_api_key_here")
 TTS_FUNCTION_ID = os.getenv("NVIDIA_TTS_FUNCTION_ID", "877104f7-e885-42b9-8de8-f6e4c6303969")
 TTS_SERVER = os.getenv("NVIDIA_TTS_SERVER", "grpc.nvcf.nvidia.com:443")
@@ -327,19 +373,20 @@ The main entry point is `app.py`, which utilizes `socketio` to run the server.
 python app.py
 ```
 
-By default, the server runs on **port 5001**:
+By default, the server runs on **port 5000**:
 👉 **Access the Dashboard:** [http://localhost:5000](http://localhost:5000)
 
 ---
 
 ## Usage
 
-Once running, navigate to the landing page. You will see three main cards and a hidden access point:
+Once running, navigate to the landing page. You will see four main cards and a hidden access point:
 
 1.  **ZYLO AI**: Opens the modal to access **RiG0R** (Research Engine) or **ZENITH** (Unified AI).
 2.  **ZYLO LINK**: Opens the secure chat application.
 3.  **ZYLO CLOUD**: Opens the file storage vault. (Premium storage vault)
-4.  **ZYLO VEIL**: Accessed via a **secret gesture** on the landing page (click/drag on the subtitle "Unified Digital Intelligence" more than 100px) or directly at `/veil`.
+4.  **ZYLO FEELS**: Opens the live weather intelligence interface with spoken summaries (`/feels`).
+5.  **ZYLO VEIL**: Accessed via a **secret gesture** on the landing page (click/drag on the subtitle "Unified Digital Intelligence" more than 100px) or directly at `/veil`.
 
 ---
 
