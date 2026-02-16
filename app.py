@@ -328,10 +328,11 @@ LANDING_PAGE = """
             max-width: none;
             margin: 0;
             position: absolute;
-            top: 6px;
-            right: 8px;
+            top: 0px;
+            right: 0px;
             height: auto;
-            z-index: 5;
+            z-index: 10;
+            padding: 15px; /* Large touch target */
         }
         .wide-card .glass-card {
             flex-direction: row;
@@ -356,7 +357,7 @@ LANDING_PAGE = """
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 4px 8px;
+            padding: 6px 12px;
             border-radius: 999px;
             background: rgba(255,255,255,0.06);
             border: 1px solid rgba(255,255,255,0.12);
@@ -364,10 +365,19 @@ LANDING_PAGE = """
             color: var(--text-main);
             font-size: 0.85rem;
             line-height: 1;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+        }
+        .card-wrapper.wide-card:active .feels-pill {
+            transform: scale(0.92);
+            background: rgba(255,255,255,0.12);
+            border-color: var(--accent);
         }
         .feels-pill img {
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
+            display: none;
         }
 
         @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
@@ -643,16 +653,27 @@ LANDING_PAGE = """
             const tempEl = document.getElementById('feels-temp');
             const iconEl = document.getElementById('feels-icon');
             if (!tempEl || !iconEl) return;
-            fetch('/api/weather')
-                .then(r => r.json())
-                .then(d => {
-                    if (!d || d.error) return;
-                    const temp = d?.TopMetrics?.Temperature;
-                    const icon = d?.Location?.Condition?.icon;
-                    if (temp !== null && temp !== undefined) tempEl.textContent = `${temp}°`;
-                    if (icon) iconEl.src = icon;
-                })
-                .catch(() => {});
+
+            const updateWeather = () => {
+                fetch('/api/weather')
+                    .then(r => r.json())
+                    .then(d => {
+                        if (!d || d.error) return;
+                        const temp = d?.TopMetrics?.Temperature;
+                        const icon = d?.Location?.Condition?.icon;
+                        if (temp !== null && temp !== undefined) {
+                            tempEl.textContent = `${temp}°`;
+                        }
+                        if (icon) {
+                            iconEl.src = icon;
+                            iconEl.onload = () => { iconEl.style.display = 'inline-block'; };
+                        }
+                    })
+                    .catch(() => {});
+            };
+
+            // Run once at start up
+            updateWeather();
         })();
     </script>
 </body>
