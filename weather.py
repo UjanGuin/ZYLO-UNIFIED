@@ -15,18 +15,17 @@ except Exception:
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-API_KEY = "428ee5ac3e354f85ba1104055261102"
-BASE_URL = "http://api.weatherapi.com/v1/current.json"
+API_KEY = "paste_your_api_key_here"
 QUERY = "Bolpur"
 REFRESH_SECONDS = 30
-TTS_API_KEY = os.getenv("NVIDIA_TTS_API_KEY", "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")
+TTS_API_KEY = os.getenv("NVIDIA_TTS_API_KEY", "paste_your_api_key_here")
 TTS_FUNCTION_ID = os.getenv("NVIDIA_TTS_FUNCTION_ID", "877104f7-e885-42b9-8de8-f6e4c6303969")
 TTS_SERVER = os.getenv("NVIDIA_TTS_SERVER", "grpc.nvcf.nvidia.com:443")
 TTS_TALK_SCRIPT = os.getenv("TTS_TALK_SCRIPT", "/home/ujan/python-clients/scripts/tts/talk.py")
 ENERGETIC_VOICE_ID = "Magpie-Multilingual.EN-US.Aria.Happy"
 
 # NVIDIA LLM CONFIG
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "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")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "paste_your_api_key_here")
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 nvidia_client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 
